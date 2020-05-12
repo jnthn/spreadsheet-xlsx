@@ -1,0 +1,3 @@
+role Spreadsheet::XLSX::Workbook {
+
+}
