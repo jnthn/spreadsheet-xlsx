@@ -28,7 +28,7 @@ class Spreadsheet::XLSX::ContentTypes {
         my (@defaults, @overrides);
         if $root.nodeName ne 'Types' {
             die X::Spreadsheet::XLSX::Format.new: message =>
-                    'Content types did not start with tag entry';
+                    'Content types did not start with tag Types';
         }
         for $root.childNodes -> LibXML::Element $entry {
             if $entry.nodeName eq 'Default' {

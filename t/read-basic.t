@@ -5,6 +5,7 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
     isa-ok $_, Spreadsheet::XLSX, 'Loaded gave a Spreadsheet::XLSX instance';
 
     given .content-types {
+        isa-ok $_, Spreadsheet::XLSX::ContentTypes;
         is .defaults.elems, 3, 'Content type has 3 defaults';
         given .defaults[0] {
             is .extension, 'bin', 'Default has expected extension';
@@ -25,6 +26,11 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
                 'Correct worksheet part names';
     }
 
+    given .find-relationships('') {
+        isa-ok $_, Spreadsheet::XLSX::Relationships;
+        ok .defined, 'We can find the root relationships';
+        is .relationships.elems, 3, 'There are 3 root relationships';
+    }
 }
 
 done-testing;

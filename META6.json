@@ -14,6 +14,7 @@
     "Spreadsheet::XLSX": "lib/Spreadsheet/XLSX.pm6",
     "Spreadsheet::XLSX::ContentTypes": "lib/Spreadsheet/XLSX/ContentTypes.pm6",
     "Spreadsheet::XLSX::Exceptions": "lib/Spreadsheet/XLSX/Exceptions.pm6",
+    "Spreadsheet::XLSX::Relationships": "lib/Spreadsheet/XLSX/Relationships.pm6",
     "Spreadsheet::XLSX::Workbook": "lib/Spreadsheet/XLSX/Workbook.pm6",
     "Spreadsheet::XLSX::Worksheet": "lib/Spreadsheet/XLSX/Worksheet.pm6"
   },

@@ -1,6 +1,7 @@
 use Libarchive::Simple;
 use Spreadsheet::XLSX::ContentTypes;
 use Spreadsheet::XLSX::Exceptions;
+use Spreadsheet::XLSX::Relationships;
 use Spreadsheet::XLSX::Workbook;
 use Spreadsheet::XLSX::Worksheet;
 
@@ -13,6 +14,10 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Workbook {
 
     #| The list of worksheets in the workbook.
     has @!worksheets;
+
+    #| Map of loaded relationships for paths. (Those never used are not
+    #| in here.)
+    has Spreadsheet::XLSX::Relationships %!relationships;
 
     #| Load an Excel workbook from the file path identified by the given string.
     multi method load(Str $file --> Spreadsheet::XLSX) {
@@ -62,5 +67,17 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Workbook {
     #| Get a list of the worksheets in this workbook.
     method worksheets(--> List) {
         @!worksheets.List
+    }
+
+    #| Get the relationships for a given path in the XLSX archive.
+    method find-relationships(Str $path --> Spreadsheet::XLSX::Relationships) {
+        .return with %!relationships{$path};
+        my $rel-path = $path eq '' ?? '_rels/.rels' !! die('NYI');
+        with $!archive{$rel-path} {
+            %!relationships{$path} = Spreadsheet::XLSX::Relationships.from-xml(.decode('utf8'))
+        }
+        else {
+            Nil
+        }
     }
 }
