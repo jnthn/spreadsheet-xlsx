@@ -30,6 +30,23 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
         isa-ok $_, Spreadsheet::XLSX::Relationships;
         ok .defined, 'We can find the root relationships';
         is .relationships.elems, 3, 'There are 3 root relationships';
+        given .find-by-id('rId2') {
+            is .id, 'rId2', 'Find by ID works (id)';
+            is .type, 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties',
+                    'Find by ID works (type)';
+            is .target, 'docProps/core.xml', 'Find by ID works (target)';
+        }
+        fails-like { .find-by-id('blah') },
+            X::Spreadsheet::XLSX::NoSuchRelationship,
+            id => 'blah';
+        given .find-by-type('http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument') {
+            is .elems, 1, 'Found one element by type';
+            is .[0].id, 'rId1', 'Correct id in by type result';
+            is .[0].type, 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument',
+                'Correct type in type result';
+            is .[0].target, 'xl/workbook.xml',
+                'Correct target in type result';
+        }
     }
 }
 

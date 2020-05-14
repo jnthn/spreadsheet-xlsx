@@ -14,6 +14,9 @@ class Spreadsheet::XLSX::Relationships {
     #| The list of relationships.
     has @.relationships;
 
+    #| By-ID lookup cache.
+    has $!id-lookup;
+
     #| Parse the XML content of a relationships file.
     method from-xml(Str $xml) {
         my LibXML::Document $doc .= parse(:string($xml));
@@ -42,5 +45,18 @@ class Spreadsheet::XLSX::Relationships {
             die X::Spreadsheet::XLSX::Format.new: message =>
                     "Missing attribute '$name' on '$entry.nodeName()'";
         }
+    }
+
+    #| Find a relationship by ID. Returns a Failure if it is not found.
+    method find-by-id(Str $id --> Relationship) {
+        without $!id-lookup {
+            $!id-lookup = @!relationships.map({ .id => $_ }).hash;
+        }
+        $!id-lookup{$id} // fail X::Spreadsheet::XLSX::NoSuchRelationship.new(:$id)
+    }
+
+    #| Finds all relationships with a specified type.
+    method find-by-type(Str $type --> Seq) {
+        @!relationships.grep(*.type eq $type)
     }
 }
