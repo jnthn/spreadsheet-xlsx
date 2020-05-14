@@ -2,22 +2,23 @@ use Libarchive::Simple;
 use Spreadsheet::XLSX::ContentTypes;
 use Spreadsheet::XLSX::Exceptions;
 use Spreadsheet::XLSX::Relationships;
+use Spreadsheet::XLSX::Root;
 use Spreadsheet::XLSX::Workbook;
-use Spreadsheet::XLSX::Worksheet;
 
-class Spreadsheet::XLSX does Spreadsheet::XLSX::Workbook {
+class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
     #| Map of files in the decompressed archive we read from, if any.
     has Hash $!archive;
 
     #| The content types of the workbook.
     has Spreadsheet::XLSX::ContentTypes $.content-types;
 
-    #| The list of worksheets in the workbook.
-    has @!worksheets;
-
     #| Map of loaded relationships for paths. (Those never used are not
     #| in here.)
     has Spreadsheet::XLSX::Relationships %!relationships;
+
+    #| The workbook itself.
+    has Spreadsheet::XLSX::Workbook $.workbook
+            handles <create-worksheet worksheets>;
 
     #| Load an Excel workbook from the file path identified by the given string.
     multi method load(Str $file --> Spreadsheet::XLSX) {
@@ -51,22 +52,36 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Workbook {
                 die X::Spreadsheet::XLSX::Format.new: message =>
                     'Required [Content_Types].xml is missing'
             }
+
+            # Locate the root relationships file, and using it, the workbook root.
+            with self.find-relationships('') -> Spreadsheet::XLSX::Relationships $top-rel {
+                with $top-rel.find-by-type('http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument').first {
+                    self!load-workbook-xml(.target);
+                }
+                else {
+                    die X::Spreadsheet::XLSX::Format.new: message =>
+                            'No workbook relation found'
+                }
+            }
+            else {
+                die X::Spreadsheet::XLSX::Format.new: message =>
+                        'Required top-level rels are missing'
+            }
         }
         else {
             ... "Don't know how to create an empty file yet";
         }
     }
 
-    #| Create a new worksheet in this workbook.
-    method create-worksheet(Str $name --> Spreadsheet::XLSX::Worksheet) {
-        my $worksheet = Spreadsheet::XLSX::Worksheet.new(:workbook(self), :$name);
-        @!worksheets.push($worksheet);
-        return $worksheet;
-    }
-
-    #| Get a list of the worksheets in this workbook.
-    method worksheets(--> List) {
-        @!worksheets.List
+    #| Loads the workbook XML file from the archive.
+    method !load-workbook-xml(Str $workbook-file) {
+        with $!archive{$workbook-file} {
+            $!workbook = Spreadsheet::XLSX::Workbook.from-xml(.decode('utf-8'), :root(self));
+        }
+        else {
+            die X::Spreadsheet::XLSX::Format.new:
+                    message => "Workbook file '$workbook-file' not found in archive";
+        }
     }
 
     #| Get the relationships for a given path in the XLSX archive.
