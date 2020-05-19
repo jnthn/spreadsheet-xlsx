@@ -1,5 +1,6 @@
 use LibXML::Document;
 use Spreadsheet::XLSX::Exceptions;
+use Spreadsheet::XLSX::Relationships;
 use Spreadsheet::XLSX::Root;
 use Spreadsheet::XLSX::Worksheet;
 
@@ -8,18 +9,22 @@ class Spreadsheet::XLSX::Workbook {
     #| The root, used for resolutions at the document level.
     has Spreadsheet::XLSX::Root $.root is required;
 
+    #| The relationships of the workbook.
+    has Spreadsheet::XLSX::Relationships $.relationships;
+
     #| The list of worksheets in the workbook.
     has @!worksheets;
 
     #| Parse the XML content of a relationships file.
-    method from-xml(Str $xml, Spreadsheet::XLSX::Root :$root!) {
+    method from-xml(Str $xml, Spreadsheet::XLSX::Root :$root!,
+                    Spreadsheet::XLSX::Relationships :$relationships!) {
         my LibXML::Document $doc .= parse(:string($xml));
         my LibXML::Element $workbook = $doc.documentElement();
         if $workbook.nodeName ne 'workbook' {
             die X::Spreadsheet::XLSX::Format.new: message =>
                     'Workbook file did not start with tag workbook';
         }
-        self.new(:$root)
+        self.new(:$root, :$relationships)
     }
 
 

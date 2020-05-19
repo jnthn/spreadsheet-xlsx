@@ -76,7 +76,9 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
     #| Loads the workbook XML file from the archive.
     method !load-workbook-xml(Str $workbook-file) {
         with $!archive{$workbook-file} {
-            $!workbook = Spreadsheet::XLSX::Workbook.from-xml(.decode('utf-8'), :root(self));
+            $!workbook = Spreadsheet::XLSX::Workbook.from-xml:
+                    .decode('utf-8'), :root(self),
+                    relationships => self.find-relationships($workbook-file);
         }
         else {
             die X::Spreadsheet::XLSX::Format.new:
@@ -87,9 +89,16 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
     #| Get the relationships for a given path in the XLSX archive.
     method find-relationships(Str $path --> Spreadsheet::XLSX::Relationships) {
         .return with %!relationships{$path};
-        my $rel-path = $path eq '' ?? '_rels/.rels' !! die('NYI');
+        my $rel-path = do if $path eq '' {
+            '_rels/.rels';
+        }
+        else {
+            my @parts = $path.split('/');
+            my $file = @parts.pop;
+            (|@parts, '_rels', $file ~ '.rels').join('/')
+        }
         with $!archive{$rel-path} {
-            %!relationships{$path} = Spreadsheet::XLSX::Relationships.from-xml(.decode('utf8'))
+            %!relationships{$path} = Spreadsheet::XLSX::Relationships.from-xml(.decode('utf8'), :for($path))
         }
         else {
             Nil

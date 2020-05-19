@@ -5,11 +5,23 @@ use Spreadsheet::XLSX::Exceptions;
 class Spreadsheet::XLSX::Relationships {
     #| An individual relationship within an archive.
     class Relationship {
-        has Str $.id;
-        has Str $.type;
+        #| The ID of the relationship.
+        has Str $.id is required;
+
+        #| The type of relationship it is.
+        has Str $.type is required;
+
+        #| The target of the relationship. These are fully qualified
+        #| within the archive, rather than what was directly read.
         has Str $.target;
+
+        #| The source of the relationship.
         has Str $.source;
     }
+
+    #| The file these relationships are for (the empty string for the
+    #| root relationships).
+    has Str $.for is required;
 
     #| The list of relationships.
     has @.relationships;
@@ -18,18 +30,18 @@ class Spreadsheet::XLSX::Relationships {
     has $!id-lookup;
 
     #| Parse the XML content of a relationships file.
-    method from-xml(Str $xml) {
+    method from-xml(Str $xml, Str :$for!) {
         my LibXML::Document $doc .= parse(:string($xml));
         my LibXML::Element $root = $doc.documentElement();
         if $root.nodeName ne 'Relationships' {
             die X::Spreadsheet::XLSX::Format.new: message =>
                     'Relationships file did not start with tag Relationships';
         }
-        self.new: relationships => $root.childNodes.map: -> LibXML::Element $entry {
+        self.new: :$for, relationships => $root.childNodes.map: -> LibXML::Element $entry {
             Relationship.new:
                     :id(self!get-attribute($entry, 'Id')),
                     :type(self!get-attribute($entry, 'Type')),
-                    :target(self!get-attribute($entry, 'Target')),
+                    :target(self!qualify($for, self!get-attribute($entry, 'Target'))),
                     :source(self!get-attribute($entry, 'Source', :optional));
         }
     }
@@ -44,6 +56,15 @@ class Spreadsheet::XLSX::Relationships {
         else {
             die X::Spreadsheet::XLSX::Format.new: message =>
                     "Missing attribute '$name' on '$entry.nodeName()'";
+        }
+    }
+
+    method !qualify(Str $base, Str $relative) {
+        with $base.rindex('/') -> $sep-pos {
+            $base.substr(0, $sep-pos + 1) ~ $relative
+        }
+        else {
+            $relative
         }
     }
 

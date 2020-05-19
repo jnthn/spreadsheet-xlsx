@@ -29,6 +29,7 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
     given .find-relationships('') {
         isa-ok $_, Spreadsheet::XLSX::Relationships;
         ok .defined, 'We can find the root relationships';
+        is .for, '', 'Root relationships are for the empty path';
         is .relationships.elems, 3, 'There are 3 root relationships';
         given .find-by-id('rId2') {
             is .id, 'rId2', 'Find by ID works (id)';
@@ -46,6 +47,20 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
                 'Correct type in type result';
             is .[0].target, 'xl/workbook.xml',
                 'Correct target in type result';
+        }
+    }
+
+    given .workbook {
+        isa-ok $_, Spreadsheet::XLSX::Workbook;
+        given .relationships {
+            is .relationships.elems, 5, 'Workbook has 5 relationships';
+            given .find-by-id('rId1') {
+                is .id, 'rId1', 'Can lookup a workbook relationship';
+                is .type, 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet',
+                    'The type of the relationship is for a worksheet';
+                is .target, 'xl/worksheets/sheet1.xml',
+                    'The target is fully qualified';
+            }
         }
     }
 }
