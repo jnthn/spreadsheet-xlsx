@@ -43,7 +43,14 @@ class Spreadsheet::XLSX::Worksheet {
 
         multi method AT-POS(Int $row, Int $col) is raw {
             my @row := (@!rows[$row] //= Array[Spreadsheet::XLSX::Cell].new);
-            @row[$col] //= self!maybe-load-from-backing($row, $col);
+            my $cell := @row[$col];
+            $cell //= self!maybe-load-from-backing($row, $col);
+            $cell
+        }
+
+        multi method ASSIGN-POS(Int $row, Int $col, Spreadsheet::XLSX::Cell $value) {
+            my @row := (@!rows[$row] //= Array[Spreadsheet::XLSX::Cell].new);
+            @row[$col] = $value
         }
 
         method !maybe-load-from-backing(Int $row, Int $col) {
@@ -60,11 +67,13 @@ class Spreadsheet::XLSX::Worksheet {
         }
 
         method !lookup-backing-row($row) {
-            unless @!backing-rows {
-                $!backing.childNodes.map: -> LibXML::Element $backing-row {
-                    if $backing-row.nodeName eq 'row' {
-                        my $row-str = self!get-attribute($backing-row, 'r');
-                        @!backing-rows[$row-str.Int - 1] = $backing-row;
+            with $!backing {
+                unless @!backing-rows {
+                    $!backing.childNodes.map: -> LibXML::Element $backing-row {
+                        if $backing-row.nodeName eq 'row' {
+                            my $row-str = self!get-attribute($backing-row, 'r');
+                            @!backing-rows[$row-str.Int - 1] = $backing-row;
+                        }
                     }
                 }
             }

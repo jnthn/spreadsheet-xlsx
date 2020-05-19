@@ -59,6 +59,17 @@ given $sheet.workbook {
             'No ID conflict';
     isnt $new-sheet-a.archive-path, $new-sheet-b.archive-path,
             'No filename conflict';
+
+    $new-sheet-a.cells[0;0] = Spreadsheet::XLSX::Cell::Text.new(value => 'Beef burrito');
+    $new-sheet-a.cells[0;1] = Spreadsheet::XLSX::Cell::Number.new(value => 42);
+    isa-ok $new-sheet-a.cells[0;0], Spreadsheet::XLSX::Cell::Text,
+            'Can successfully assign a text cell into the worksheet';
+    is $new-sheet-a.cells[0;0].value, 'Beef burrito',
+            'Cell value is as expected';
+    isa-ok $new-sheet-a.cells[0;1], Spreadsheet::XLSX::Cell::Number,
+            'Can successfully assign a number cell into the worksheet';
+    is $new-sheet-a.cells[0;1].value, 42,
+            'Cell value is as expected';
 }
 
 done-testing;
