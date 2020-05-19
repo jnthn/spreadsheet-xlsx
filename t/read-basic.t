@@ -62,6 +62,17 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
                     'The target is fully qualified';
             }
         }
+        is .worksheets.elems, 2, 'Workbook has 2 worksheets';
+    }
+
+    given .worksheets {
+        is .elems, 2, 'Can call worksheets on top level object too';
+        given .[0] {
+            is .name, 'Songs', 'Correct name of first worksheet';
+        }
+        given .[1] {
+            is .name, 'Dishes', 'Correct name of second worksheet';
+        }
     }
 }
 

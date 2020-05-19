@@ -15,6 +15,11 @@ class Spreadsheet::XLSX::Workbook {
     #| The list of worksheets in the workbook.
     has @!worksheets;
 
+    #| The backing XML document, if any.
+    has LibXML::Document $!backing;
+
+    submethod TWEAK(:$!backing, :@!worksheets --> Nil) {}
+
     #| Parse the XML content of a relationships file.
     method from-xml(Str $xml, Spreadsheet::XLSX::Root :$root!,
                     Spreadsheet::XLSX::Relationships :$relationships!) {
@@ -24,9 +29,32 @@ class Spreadsheet::XLSX::Workbook {
             die X::Spreadsheet::XLSX::Format.new: message =>
                     'Workbook file did not start with tag workbook';
         }
-        self.new(:$root, :$relationships)
+        with $workbook.childNodes.list.first(*.name eq 'sheets') -> LibXML::Element $sheets-node {
+            my @worksheets = $sheets-node.childNodes.map: -> LibXML::Element $sheet-node {
+                my $name := self!get-attribute($sheet-node, 'name');
+                Spreadsheet::XLSX::Worksheet.new(:$root, :$name)
+            }
+            self.new(:$root, :$relationships, :@worksheets, :backing($doc))
+        }
+        else {
+            die X::Spreadsheet::XLSX::Format.new: message =>
+                    'Required sheets element not found in workbook'
+        }
     }
 
+
+    method !get-attribute(LibXML::Element $entry, Str $name, :$optional --> Str) {
+        with $entry.getAttributeNode($name) -> LibXML::Attr $attr {
+            $attr.string-value
+        }
+        elsif $optional {
+            Nil
+        }
+        else {
+            die X::Spreadsheet::XLSX::Format.new: message =>
+                    "Missing attribute '$name' on '$entry.nodeName()'";
+        }
+    }
 
     #| Create a new worksheet in this workbook.
     method create-worksheet(Str $name --> Spreadsheet::XLSX::Worksheet) {
