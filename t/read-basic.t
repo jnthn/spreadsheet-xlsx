@@ -65,6 +65,22 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
         is .worksheets.elems, 2, 'Workbook has 2 worksheets';
     }
 
+    given .shared-strings {
+        isa-ok $_, Spreadsheet::XLSX::SharedStrings;
+        ok .defined, 'Have shared strings';
+        given .[0] {
+            isa-ok $_, Spreadsheet::XLSX::Cell::Text,
+                'First entry is a text cell';
+            is .value, 'Song', 'Correct value';
+        }
+        given .[6] {
+            isa-ok $_, Spreadsheet::XLSX::Cell::Text,
+                    'Sixth entry is a text cell';
+            is .value, 'Allesfresser', 'Correct value';
+        }
+        isa-ok .[42], Failure, 'Get Failure if shared index is out of range';
+    }
+
     given .worksheets {
         is .elems, 2, 'Can call worksheets on top level object too';
         given .[0] {

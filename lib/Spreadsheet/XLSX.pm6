@@ -18,7 +18,7 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
 
     #| The workbook itself.
     has Spreadsheet::XLSX::Workbook $.workbook
-            handles <create-worksheet worksheets>;
+            handles <create-worksheet worksheets shared-strings>;
 
     #| Load an Excel workbook from the file path identified by the given string.
     multi method load(Str $file --> Spreadsheet::XLSX) {
@@ -55,7 +55,9 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
 
             # Locate the root relationships file, and using it, the workbook root.
             with self.find-relationships('') -> Spreadsheet::XLSX::Relationships $top-rel {
-                with $top-rel.find-by-type('http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument').first {
+                with $top-rel
+                        .find-by-type('http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument')
+                        .first {
                     self!load-workbook-xml(.target);
                 }
                 else {
@@ -103,5 +105,11 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
         else {
             Nil
         }
+    }
+
+    #| Obtain a file from the archive. Will fail if we are not backed
+    #| by an archive, or if there is no such file.
+    method get-file-from-archive(Str $path --> Blob) {
+        $!archive{$path} // fail "No such file '$path' in archive"
     }
 }
