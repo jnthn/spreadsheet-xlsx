@@ -7,6 +7,9 @@ class Spreadsheet::XLSX::Worksheet {
     #| The root, used for resolutions at the document level.
     has Spreadsheet::XLSX::Root $.root is required;
 
+    #| The worksheet ID within the workbook.
+    has Int $.id is required;
+
     #| The name of the worksheet.
     has Str $.name is rw is required;
 
@@ -14,6 +17,10 @@ class Spreadsheet::XLSX::Worksheet {
     #| We lazily load from this (meaning if we have a workbook with many
     #| sheets, we only load those we need to).
     has Str $!backing-path;
+
+    #| Otherwise, this is the proposed path for it, where it will go when
+    #| we save it.
+    has Str $!proposed-path;
 
     #| Models the cells in the spreadsheet, providing access as a 2D array.
     class Cells does Positional {
@@ -100,7 +107,7 @@ class Spreadsheet::XLSX::Worksheet {
     #| document.
     has Cells $!cells;
 
-    submethod TWEAK(:$!backing-path --> Nil) {}
+    submethod TWEAK(Str :$!backing-path, Str :$!proposed-path --> Nil) {}
 
     #| Get the cells model, which can be indexed using a 2-dimensional
     #| index (e.g. $worksheet.cells[1;2]).
@@ -141,5 +148,10 @@ class Spreadsheet::XLSX::Worksheet {
             }
         }
         $!backing
+    }
+
+    #| The path of the sheet in the XLSX archive.
+    method archive-path(--> Str) {
+        $!backing-path // $!proposed-path
     }
 }

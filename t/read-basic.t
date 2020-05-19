@@ -84,6 +84,7 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
     given .worksheets {
         is .elems, 2, 'Can call worksheets on top level object too';
         given .[0] {
+            is .id, 1, 'Correct ID of first worksheet';
             is .name, 'Songs', 'Correct name of first worksheet';
             given .cells[0;0] {
                 isa-ok $_, Spreadsheet::XLSX::Cell::Text, '0;0 is a text cell';
@@ -100,6 +101,7 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
             nok .cells[4;0].defined, 'Unset cell returns undefined';
         }
         given .[1] {
+            is .id, 2, 'Correct ID of second worksheet';
             is .name, 'Dishes', 'Correct name of second worksheet';
         }
     }

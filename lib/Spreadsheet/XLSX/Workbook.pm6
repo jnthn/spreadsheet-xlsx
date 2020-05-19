@@ -22,7 +22,7 @@ class Spreadsheet::XLSX::Workbook {
     #| The backing XML document, if any.
     has LibXML::Document $!backing;
 
-    submethod TWEAK(:$!backing, :@!worksheets --> Nil) {}
+    submethod TWEAK(LibXML::Document :$!backing, :@!worksheets --> Nil) {}
 
     #| Parse the XML content of a relationships file.
     method from-xml(Str $xml, Spreadsheet::XLSX::Root :$root!,
@@ -35,11 +35,12 @@ class Spreadsheet::XLSX::Workbook {
         }
         with $workbook.childNodes.list.first(*.name eq 'sheets') -> LibXML::Element $sheets-node {
             my @worksheets = $sheets-node.childNodes.map: -> LibXML::Element $sheet-node {
+                my $id := self!get-attribute($sheet-node, 'sheetId').Int;
                 my $name := self!get-attribute($sheet-node, 'name');
                 my $sheet-rel-id := self!get-attribute($sheet-node, 'r:id');
                 with $relationships.find-by-id($sheet-rel-id) -> $sheet-rel {
                     my $backing-path = $sheet-rel.target;
-                    Spreadsheet::XLSX::Worksheet.new(:$root, :$name, :$backing-path)
+                    Spreadsheet::XLSX::Worksheet.new(:$root, :$id, :$name, :$backing-path)
                 }
                 else {
                     die X::Spreadsheet::XLSX::Format.new: message =>
@@ -85,8 +86,24 @@ class Spreadsheet::XLSX::Workbook {
 
     #| Create a new worksheet in this workbook.
     method create-worksheet(Str $name --> Spreadsheet::XLSX::Worksheet) {
-        my $worksheet = Spreadsheet::XLSX::Worksheet.new(:$!root :$name);
+        # Give it a unique ID and file path (in all but weird cases,
+        # the filename will just be sheetN where N is the ID, but we
+        # try and be robust in the face of oddities).
+        my $id = @!worksheets ?? @!worksheets.map(*.id).max + 1 !! 1;
+        my $proposed-path = 'xl/worksheets/sheet' ~ $id ~ '.xml';
+        while $!root.get-file-from-archive($proposed-path) {
+            $proposed-path = 'xl/worksheets/sheet' ~ ++$id ~ '.xml'
+        }
+
+        # Create the worksheet.
+        my $worksheet = Spreadsheet::XLSX::Worksheet.new(:$!root :$id, :$name, :$proposed-path);
         @!worksheets.push($worksheet);
+
+        # Add the relationship.
+        $!relationships.add:
+                type => 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet',
+                target => $proposed-path;
+
         return $worksheet;
     }
 

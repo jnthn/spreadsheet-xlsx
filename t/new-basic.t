@@ -28,4 +28,37 @@ given $sheet.find-relationships('') {
     }
 }
 
+given $sheet.workbook {
+    isa-ok $_, Spreadsheet::XLSX::Workbook;
+    is .worksheets.elems, 0, 'New workbook contains no worksheets';
+    is .relationships.find-by-type('http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet').elems,
+            0, 'There are no worksheet relations either';
+
+    my $new-sheet-a;
+    lives-ok { $new-sheet-a = .create-worksheet('Test A') },
+        'Can create a new worksheet';
+    isa-ok $new-sheet-a, Spreadsheet::XLSX::Worksheet,
+        'The created worksheet is returned';
+    is .worksheets.elems, 1,
+        'Workbook now has 1 worksheet';
+    is .worksheets[0].name, 'Test A',
+        'Worksheet has expected name';
+    given .relationships.find-by-type('http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet') {
+        is .elems, 1, 'One new worksheet relation in the workbook relations';
+        is .[0].target, $new-sheet-a.archive-path, 'Correct relation target';
+    }
+
+    my $new-sheet-b;
+    lives-ok { $new-sheet-b = .create-worksheet('Test B') },
+            'Can create another new worksheet';
+    is .worksheets.elems, 2,
+            'Workbook now has 2 worksheets';
+    is .worksheets[1].name, 'Test B',
+            'Worksheet has expected name';
+    isnt $new-sheet-a.id, $new-sheet-b.id,
+            'No ID conflict';
+    isnt $new-sheet-a.archive-path, $new-sheet-b.archive-path,
+            'No filename conflict';
+}
+
 done-testing;

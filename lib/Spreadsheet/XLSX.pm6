@@ -78,11 +78,18 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
             # found.
             my constant $workbook-path = 'xl/workbook.xml';
             my $root-relationships = Spreadsheet::XLSX::Relationships.new:
-                    for => $workbook-path;
+                    for => '';
             $root-relationships.add:
                     type => 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument',
                     target => $workbook-path;
             %!relationships{''} = $root-relationships;
+
+            # Create an empty workbook.
+            my $workbook-relationships = Spreadsheet::XLSX::Relationships.new:
+                    for => $workbook-path;
+            $!workbook = Spreadsheet::XLSX::Workbook.new:
+                    root => self,
+                    relationships => $workbook-relationships;
         }
     }
 
