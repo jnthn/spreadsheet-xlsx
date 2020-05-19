@@ -71,7 +71,18 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
             }
         }
         else {
+            # Create default set of content types (minimal needed).
             $!content-types = Spreadsheet::XLSX::ContentTypes.new;
+
+            # Set up root relationships, indicating how the workbook is
+            # found.
+            my constant $workbook-path = 'xl/workbook.xml';
+            my $root-relationships = Spreadsheet::XLSX::Relationships.new:
+                    for => $workbook-path;
+            $root-relationships.add:
+                    type => 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument',
+                    target => $workbook-path;
+            %!relationships{''} = $root-relationships;
         }
     }
 

@@ -29,6 +29,9 @@ class Spreadsheet::XLSX::Relationships {
     #| By-ID lookup cache.
     has $!id-lookup;
 
+    #| Maximum ID, for if we need to add further ones.
+    has $!max-id;
+
     #| Parse the XML content of a relationships file.
     method from-xml(Str $xml, Str :$for!) {
         my LibXML::Document $doc .= parse(:string($xml));
@@ -79,5 +82,17 @@ class Spreadsheet::XLSX::Relationships {
     #| Finds all relationships with a specified type.
     method find-by-type(Str $type --> Seq) {
         @!relationships.grep(*.type eq $type)
+    }
+
+    #| Adds a new relationship, allocated it an ID.
+    method add(Str :$target!, Str :$type!, Str :$source --> Relationship) {
+        my $try-id-number = @!relationships;
+        my $id;
+        repeat {
+            $id = 'rId' ~ $try-id-number;
+        } while self.find-by-id($id);
+        my $relationship = Relationship.new(:$id, :$target, :$type, :$source);
+        @!relationships.push: $relationship;
+        return $relationship;
     }
 }
