@@ -39,7 +39,7 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
         self.new(:%archive)
     }
 
-    submethod TWEAK(:$!archive) {
+    submethod TWEAK(Hash :$!archive) {
         # If we are being created based upon an archive, then we need to
         # parse that.
         with $!archive {
@@ -71,7 +71,7 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
             }
         }
         else {
-            ... "Don't know how to create an empty file yet";
+            $!content-types = Spreadsheet::XLSX::ContentTypes.new;
         }
     }
 

@@ -42,7 +42,7 @@ class Spreadsheet::XLSX::ContentTypes {
                         content-type => self!get-attribute($entry, 'ContentType');
             }
         }
-        self.new(:@defaults, :@overrides)
+        self.bless(:@defaults, :@overrides)
     }
 
     method !get-attribute(LibXML::Element $entry, Str $name --> Str) {
@@ -53,6 +53,17 @@ class Spreadsheet::XLSX::ContentTypes {
             die X::Spreadsheet::XLSX::Format.new: message =>
                     "Missing attribute '$name' on '$entry.nodeName()'";
         }
+    }
+
+    #| Creates a content types file with the default set of content types
+    #| needed for a basic XLSX file.
+    method new(--> Spreadsheet::XLSX::ContentTypes) {
+        my constant @default-defaults =
+                Default.new(extension => 'rels', content-type => 'application/vnd.openxmlformats-package.relationships+xml'),
+                Default.new(extension => 'xml', content-type => 'application/xml'),;
+        my constant @default-overrides =
+                Override.new(part-name => '/xl/workbook.xml', content-type => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml'),;
+        self.bless(defaults => @default-defaults, overrides => @default-overrides)
     }
 
     #| Finds the (first) part name with a given content type.
