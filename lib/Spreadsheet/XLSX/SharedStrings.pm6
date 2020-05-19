@@ -39,7 +39,7 @@ class Spreadsheet::XLSX::SharedStrings does Positional {
                     die X::Spreadsheet::XLSX::Format.new: message =>
                             'Shared strings entry was not an si node';
                 }
-                return cell-from-xml($si.first);
+                return shared-cell-from-xml($si.first);
             }
         }
         fail "Could not resolve shared string entry $idx";
