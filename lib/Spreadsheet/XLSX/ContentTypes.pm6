@@ -75,4 +75,33 @@ class Spreadsheet::XLSX::ContentTypes {
     method part-names-for-content-type(Str $content-type --> Seq) {
         @!overrides.grep(*.content-type eq $content-type).map(*.part-name)
     }
+
+    #| Turn the content types into an XML string.
+    method to-xml(--> Str) {
+        # Create root element.
+        my LibXML::Document $doc .= new: :version('1.0'), :enc('UTF-8');
+        $doc.setStandalone(LibXML::Document::XmlStandaloneNo);
+        my LibXML::Element $root = $doc.createElementNS(
+                'http://schemas.openxmlformats.org/package/2006/content-types',
+                'Types');
+        $doc.setDocumentElement($root);
+
+        # Add defaults.
+        for @!defaults {
+            my LibXML::Element $element = $doc.createElement('Default');
+            $element.add($doc.createAttribute('Extension', .extension));
+            $element.add($doc.createAttribute('ContentType', .content-type));
+            $root.add($element);
+        }
+
+        # Add overrides.
+        for @!overrides {
+            my LibXML::Element $element = $doc.createElement('Override');
+            $element.add($doc.createAttribute('PartName', .part-name));
+            $element.add($doc.createAttribute('ContentType', .content-type));
+            $root.add($element);
+        }
+
+        return $doc.Str;
+    }
 }
