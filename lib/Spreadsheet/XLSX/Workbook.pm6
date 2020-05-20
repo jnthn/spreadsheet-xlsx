@@ -116,4 +116,48 @@ class Spreadsheet::XLSX::Workbook {
     method worksheets(--> List) {
         @!worksheets.List
     }
+
+    #| Form an XML representation of the workbook. If the workbook was loaded
+    #| from an existing XML document, then it will just change the parts of
+    #| that backing storage that it understands, and aim to leave the rest of
+    #| it intact.
+    method to-xml(--> Str) {
+        # Create baseline backing storage, if there isn't any. Otherwise,
+        # just locate the sheets part.
+        my LibXML::Element $sheets = do with $!backing {
+            # This will work out for sure, 'cus if it didn't we'd not have
+            # successfully constructed this instance.
+            my $workbook = $!backing.documentElement;
+            $workbook.childNodes.list.first(*.name eq 'sheets')
+        }
+        else {
+            $!backing .= new: :version('1.0'), :enc('UTF-8');
+            $!backing.setStandalone(LibXML::Document::XmlStandaloneNo);
+            my LibXML::Element $root = $!backing.createElementNS(
+                    'http://schemas.openxmlformats.org/package/2006/content-types',
+                    'workbook');
+            $root.addNamespace('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'r');
+            $!backing.setDocumentElement($root);
+            my LibXML::Element $sheets = $!backing.createElement('sheets');
+            $root.add($sheets);
+            $sheets
+        }
+
+        # Clear out the sheets that currently exist, and replace them
+        # with those that we have.
+        $sheets.removeChildNodes();
+        my %sheet-path-to-id = $!relationships
+                .find-by-type('http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet')
+                .map({ .target => .id });
+        for @!worksheets {
+            my $sheet = $!backing.createElement('sheet');
+            $sheet.add($!backing.createAttribute('name', .name));
+            $sheet.add($!backing.createAttribute('sheetId', ~.id));
+            $sheet.add($!backing.createAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'Id',
+                    %sheet-path-to-id{.archive-path} // die "Missing reference for sheet {.archive-path}"));
+            $sheets.add($sheet);
+        }
+
+        return $!backing.Str;
+    }
 }
