@@ -104,6 +104,11 @@ class Spreadsheet::XLSX::Workbook {
                 type => 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet',
                 target => $proposed-path;
 
+        # Add content type override.
+        $!root.content-types.add-override:
+                part-name => $proposed-path,
+                content-type => 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml';
+
         return $worksheet;
     }
 

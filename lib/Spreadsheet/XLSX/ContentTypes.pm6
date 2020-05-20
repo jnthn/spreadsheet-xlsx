@@ -76,6 +76,13 @@ class Spreadsheet::XLSX::ContentTypes {
         @!overrides.grep(*.content-type eq $content-type).map(*.part-name)
     }
 
+    #| Adds an override.
+    method add-override(Str :$part-name!, Str :$content-type --> Override) {
+        my $override = Override.new(:$part-name, :$content-type);
+        @!overrides.push($override);
+        return $override;
+    }
+
     #| Turn the content types into an XML string.
     method to-xml(--> Str) {
         # Create root element.
