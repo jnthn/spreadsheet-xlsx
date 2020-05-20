@@ -77,16 +77,14 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
             # Set up root relationships, indicating how the workbook is
             # found.
             my constant $workbook-path = 'xl/workbook.xml';
-            my $root-relationships = Spreadsheet::XLSX::Relationships.new:
-                    for => '';
+
+            my $root-relationships = self.find-relationships('', :create);
             $root-relationships.add:
                     type => 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument',
                     target => $workbook-path;
-            %!relationships{''} = $root-relationships;
 
             # Create an empty workbook.
-            my $workbook-relationships = Spreadsheet::XLSX::Relationships.new:
-                    for => $workbook-path;
+            my $workbook-relationships = self.find-relationships($workbook-path, :create);
             $!workbook = Spreadsheet::XLSX::Workbook.new:
                     root => self,
                     relationships => $workbook-relationships;
@@ -107,21 +105,29 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
     }
 
     #| Get the relationships for a given path in the XLSX archive.
-    method find-relationships(Str $path --> Spreadsheet::XLSX::Relationships) {
+    method find-relationships(Str $path, Bool :$create = False --> Spreadsheet::XLSX::Relationships) {
         .return with %!relationships{$path};
-        my $rel-path = do if $path eq '' {
+        my $rel-path = self!rel-path($path);
+        with $!archive{$rel-path} {
+            %!relationships{$path} = Spreadsheet::XLSX::Relationships.from-xml(.decode('utf8'), :for($path))
+        }
+        elsif $create {
+            %!relationships{$path} = Spreadsheet::XLSX::Relationships.new(:for($path))
+        }
+        else {
+            Nil
+        }
+    }
+
+    #| Calculate the path of the relations file for a given path.
+    method !rel-path(Str $path --> Str) {
+        if $path eq '' {
             '_rels/.rels';
         }
         else {
             my @parts = $path.split('/');
             my $file = @parts.pop;
             (|@parts, '_rels', $file ~ '.rels').join('/')
-        }
-        with $!archive{$rel-path} {
-            %!relationships{$path} = Spreadsheet::XLSX::Relationships.from-xml(.decode('utf8'), :for($path))
-        }
-        else {
-            Nil
         }
     }
 
