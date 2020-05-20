@@ -86,13 +86,38 @@ class Spreadsheet::XLSX::Relationships {
 
     #| Adds a new relationship, allocated it an ID.
     method add(Str :$target!, Str :$type!, Str :$source --> Relationship) {
-        my $try-id-number = @!relationships;
+        my $try-id-number = @!relationships.elems;
         my $id;
         repeat {
-            $id = 'rId' ~ $try-id-number;
+            $id = 'rId' ~ ++$try-id-number;
         } while self.find-by-id($id);
         my $relationship = Relationship.new(:$id, :$target, :$type, :$source);
         @!relationships.push: $relationship;
         return $relationship;
+    }
+
+    #| Turn the relationships into an XML string.
+    method to-xml(--> Str) {
+        # Create root element.
+        my LibXML::Document $doc .= new: :version('1.0'), :enc('UTF-8');
+        $doc.setStandalone(LibXML::Document::XmlStandaloneNo);
+        my LibXML::Element $root = $doc.createElementNS(
+                'http://schemas.openxmlformats.org/package/2006/content-types',
+                'Relationships');
+        $doc.setDocumentElement($root);
+
+        # Add each of the relationships to it.
+        for @!relationships {
+            my LibXML::Element $element = $doc.createElement('Relationship');
+            $element.add($doc.createAttribute('Id', .id));
+            $element.add($doc.createAttribute('Type', .type));
+            $element.add($doc.createAttribute('Target', .target));
+            with .source {
+                $element.add($doc.createAttribute('Source', $_));
+            }
+            $root.add($element);
+        }
+
+        return $doc.Str;
     }
 }
