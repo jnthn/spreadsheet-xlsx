@@ -165,7 +165,7 @@ class Spreadsheet::XLSX::Workbook {
             my $sheet = $!backing.createElement('sheet');
             $sheet.add($!backing.createAttribute('name', .name));
             $sheet.add($!backing.createAttribute('sheetId', ~.id));
-            $sheet.add($!backing.createAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'Id',
+            $sheet.add($!backing.createAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id',
                     %sheet-path-to-id{.archive-path} // die "Missing reference for sheet {.archive-path}"));
             $sheets.add($sheet);
         }
