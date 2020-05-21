@@ -106,7 +106,7 @@ class Spreadsheet::XLSX::Workbook {
 
         # Add content type override.
         $!root.content-types.add-override:
-                part-name => $proposed-path,
+                part-name => "/$proposed-path",
                 content-type => 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml';
 
         return $worksheet;

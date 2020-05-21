@@ -75,13 +75,13 @@ given $sheet.workbook {
 given $sheet.content-types {
     is .defaults.elems, 2, 'Still 2 default content types after adding sheets';
     is .overrides.elems, 3, 'Now there are 3 overrides';
-    given .overrides.grep(*.part-name eq 'xl/worksheets/sheet1.xml') {
+    given .overrides.grep(*.part-name eq '/xl/worksheets/sheet1.xml') {
         is .elems, 1, 'Have an override for first sheet';
         is .[0].content-type,
             'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml',
             'Override for first sheet has correct content type';
     }
-    given .overrides.grep(*.part-name eq 'xl/worksheets/sheet2.xml') {
+    given .overrides.grep(*.part-name eq '/xl/worksheets/sheet2.xml') {
         is .elems, 1, 'Have an override for first sheet';
         is .[0].content-type,
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml',
