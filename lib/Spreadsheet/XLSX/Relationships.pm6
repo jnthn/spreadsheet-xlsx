@@ -71,6 +71,20 @@ class Spreadsheet::XLSX::Relationships {
         }
     }
 
+    method !relativize(Str $absolute) {
+        with $!for.rindex('/') -> $sep-pos {
+            my $remove = $!for.substr(0, $sep-pos + 1);
+            unless $absolute.starts-with($remove) {
+                die "Confused trying to relativize '$absolute' relative to '$!for'";
+            }
+            $absolute.substr($remove.chars)
+        }
+        else {
+            $absolute
+        }
+    }
+
+
     #| Find a relationship by ID. Returns a Failure if it is not found.
     method find-by-id(Str $id --> Relationship) {
         without $!id-lookup {
@@ -111,7 +125,8 @@ class Spreadsheet::XLSX::Relationships {
             my LibXML::Element $element = $doc.createElement('Relationship');
             $element.add($doc.createAttribute('Id', .id));
             $element.add($doc.createAttribute('Type', .type));
-            $element.add($doc.createAttribute('Target', .target));
+            my $relative-target = self!relativize(.target);
+            $element.add($doc.createAttribute('Target', $relative-target));
             with .source {
                 $element.add($doc.createAttribute('Source', $_));
             }
