@@ -11,7 +11,7 @@ class Spreadsheet::XLSX::SharedStrings does Positional {
     #| The backing document from the shared strings table, if any.
     has LibXML::Element $!backing;
 
-    submethod TWEAK(:$!backing --> Nil) {}
+    submethod TWEAK(LibXML::Element :$!backing --> Nil) {}
 
     #| Create a string table from an XML document.
     method from-xml(Str $xml, Spreadsheet::XLSX::Root :$root! --> Spreadsheet::XLSX::SharedStrings) {

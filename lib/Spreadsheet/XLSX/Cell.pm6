@@ -74,6 +74,18 @@ sub cell-from-xml(LibXML::Element $element) is export {
             }
             Spreadsheet::XLSX::Cell::Number.new(value => +$value-node.string-value)
         }
+        when 'inlineStr' {
+            my LibXML::Element $is-node = $element.first;
+            unless $is-node.nodeName eq 'is' {
+                die X::Spreadsheet::XLSX::Format.new:
+                        message => 'inlineStr cell missing is tag';
+            }
+            my LibXML::Element $content-node = $is-node.first;
+            unless $content-node.nodeName eq 't' {
+                die X::NYI.new(feature => "Node of type $content-node.nodeName() in inline string");
+            }
+            Spreadsheet::XLSX::Cell::Text.new(value => $content-node.string-value);
+        }
         default {
             die X::NYI.new(feature => "Excel cells of type '$_'");
         }

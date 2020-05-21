@@ -93,4 +93,21 @@ my Blob $serialized;
 lives-ok { $serialized = $sheet.to-blob() },
         'Can serialize it into a blob';
 
+my Spreadsheet::XLSX $reloaded;
+lives-ok { $reloaded = Spreadsheet::XLSX.load($serialized) },
+        'Can reload the serialized sheet';
+given $reloaded.worksheets {
+    is .elems, 2, 'Workbook has two worksheets';
+    is .[0].name, 'Test A', 'First worksheet has correct name';
+    is .[1].name, 'Test B', 'Second worksheet has correct name';
+    given .[0].cells[0;0] {
+        isa-ok $_, Spreadsheet::XLSX::Cell::Text;
+        is .value, 'Beef burrito', 'Can successfully a written text value';
+    }
+    given .[0].cells[0;1] {
+        isa-ok $_, Spreadsheet::XLSX::Cell::Number;
+        is .value, 42, 'Can successfully a written number value';
+    }
+}
+
 done-testing;
