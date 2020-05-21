@@ -3,6 +3,8 @@ use Spreadsheet::XLSX::Exceptions;
 
 #| Commonalities of all kinds of cell.
 role Spreadsheet::XLSX::Cell {
+    #| Sync the value to XML.
+    method sync-value-xml(LibXML::Document $document, LibXML::Element $col --> Nil) { ... }
 }
 
 #| A number cell.
@@ -14,6 +16,18 @@ class Spreadsheet::XLSX::Cell::Number does Spreadsheet::XLSX::Cell {
     multi method Str(::?CLASS:D:) {
         ~$!value
     }
+
+    #| Sync the value to XML.
+    method sync-value-xml(LibXML::Document $document, LibXML::Element $col --> Nil) {
+        # A number node has no type.
+        $col.removeAttributeNode($_) with $col.getAttributeNode('t');
+
+        # Number goes within a v element.
+        $col.removeChildNodes();
+        my LibXML::Element $v = $document.createElement('v');
+        $v.nodeValue = ~$!value;
+        $col.add($v);
+    }
 }
 
 #| A simple text cell.
@@ -24,6 +38,25 @@ class Spreadsheet::XLSX::Cell::Text does Spreadsheet::XLSX::Cell {
     #| Get a string representing the cell's value.
     multi method Str(::?CLASS:D:) {
         $!value
+    }
+
+    #| Sync the value to XML.
+    method sync-value-xml(LibXML::Document $document, LibXML::Element $col --> Nil) {
+        # Make sure the type is inlineStr.
+        with $col.getAttributeNode('t') {
+            .setValue('inlineStr')
+        }
+        else {
+            $col.add($document.createAttribute('t', 'inlineStr'));
+        }
+
+        # Set the content (<is><t>content</t></is>).
+        $col.removeChildNodes();
+        my LibXML::Element $is = $document.createElement('is');
+        my LibXML::Element $t = $document.createElement('t');
+        $t.nodeValue = $!value;
+        $is.add($t);
+        $col.add($is);
     }
 }
 

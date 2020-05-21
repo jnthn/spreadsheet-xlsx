@@ -107,6 +107,81 @@ class Spreadsheet::XLSX::Worksheet {
                         "Missing attribute '$name' on '$entry.nodeName()'";
             }
         }
+
+        #| Synchronize the values of cells we've set/changed with the
+        #| sheet data XML document.
+        method sync-sheet-data-xml(LibXML::Element $sheetData --> Nil) {
+            # Look through the rows we have cell data for; these are ones we
+            # have looked at or potentially modified.
+            my LibXML::Document $document = $sheetData.getOwnerDocument;
+            for @!rows.kv -> $row-idx, $cells {
+                # If we never vivified this row, then either it has no data or
+                # we didn't update what was already there.
+                next without $cells;
+
+                # Do we have a backing row for this cell? If not, create one and
+                # add it.
+                my LibXML::Element $row-xml = @!backing-rows[$row-idx] // do {
+                    my LibXML::Element $row = $document.createElement('row');
+                    $sheetData.add($row);
+                    $row.add($document.createAttribute('r', ~($row-idx + 1)));
+                    $row
+                }
+
+                # Build a map of existing cells in the row, identified by their
+                # cell name (A2, B2, etc.)
+                my %existing-cells = $row-xml.childNodes.map({
+                    self!get-attribute($_, 'r') => $_
+                });
+
+                # Go over the cells we have a value for. These are the ones we
+                # potentially want to update. Also keep track of the minimum and
+                # maximum cell index we change.
+                my $min-col = Inf;
+                my $max-col = -Inf;
+                for $cells.kv -> $col-idx, Spreadsheet::XLSX::Cell $cell {
+                    with $cell {
+                        # Update info we'll use for updating the span.
+                        $min-col min= $col-idx;
+                        $max-col max= $col-idx;
+
+                        # Obtain the cell node from the existing document or
+                        # make a new one.
+                        my $cell-name = self!cell-name($row-idx, $col-idx);
+                        my $cell-xml = do with %existing-cells{$cell-name} {
+                            $_
+                        }
+                        else {
+                            my LibXML::Element $cell = $document.createElement('c');
+                            $row-xml.add($cell);
+                            $cell.add($document.createAttribute('r', $cell-name));
+                            $cell
+                        }
+
+                        # Sync the data to it.
+                        $cell.sync-value-xml($document, $cell-xml);
+                    }
+                }
+
+                # Set or update the span.
+                with $row-xml.getAttributeNode('spans') -> LibXML::Attr $spans {
+                    my ($prev-min, $prev-max) = $spans.string-value.split(':').map(* - 1);
+                    $min-col min= $prev-min;
+                    $max-col max= $prev-max;
+                    $spans.setValue($min-col + 1 ~ ':' ~ $max-col + 1);
+                }
+                else {
+                    $row-xml.add($document.createAttribute('spans', $min-col + 1 ~ ':' ~ $max-col + 1));
+                }
+            }
+        }
+
+        #| Turns 0-based array indices for row and column into the cell
+        #| name.
+        method !cell-name(Int $row, Int $col) {
+            my constant $offset = 'A'.ord - '0'.ord;
+            $col.base(26).comb.map({ chr .ord + $offset }).join ~ ($row + 1)
+        }
     }
 
     #| The cached backing document, if we have one.
@@ -162,5 +237,34 @@ class Spreadsheet::XLSX::Worksheet {
     #| The path of the sheet in the XLSX archive.
     method archive-path(--> Str) {
         $!backing-path // $!proposed-path
+    }
+
+    #| Produce XML for the worksheet.
+    method to-xml(--> Str) {
+        # Create a stub worksheet document if we weren't loaded from
+        # one.
+        without $!backing {
+            $!backing .= new: :version('1.0'), :enc('UTF-8');
+            $!backing.setStandalone(LibXML::Document::XmlStandaloneNo);
+            my LibXML::Element $root = $!backing.createElementNS(
+                    'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
+                    'worksheet');
+            $root.addNamespace('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'r');
+            $!backing.setDocumentElement($root);
+            my LibXML::Element $sheetData = $!backing.createElement('sheetData');
+            $root.add($sheetData);
+        }
+
+        # Update the sheet data.
+        my @node-list := $!backing.documentElement.childNodes.list;
+        with @node-list.first(*.name eq 'sheetData') -> LibXML::Element $sheetData {
+            .sync-sheet-data-xml($sheetData) with $!cells;
+        }
+        else {
+            die X::Spreadsheet::XLSX::Format.new:
+                    message => 'Missing sheetData element';
+        }
+
+        return $!backing.Str;
     }
 }
