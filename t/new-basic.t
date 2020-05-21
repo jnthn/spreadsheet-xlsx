@@ -89,4 +89,8 @@ given $sheet.content-types {
     }
 }
 
+my Blob $serialized;
+lives-ok { $serialized = $sheet.to-blob() },
+        'Can serialize it into a blob';
+
 done-testing;

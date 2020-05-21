@@ -117,6 +117,18 @@ class Spreadsheet::XLSX::Workbook {
         @!worksheets.List
     }
 
+    #| Synchronizes all changes to the internal representation of the
+    #| archive, including all new or modified worksheets.
+    method sync-to-archive(--> Nil) {
+        # Save the XML of this workbook.
+        $!root.set-file-in-archive($!relationships.for, self.to-xml().encode('utf-8'));
+
+        # And then the worksheets.
+        for @!worksheets {
+            .sync-to-archive;
+        }
+    }
+
     #| Form an XML representation of the workbook. If the workbook was loaded
     #| from an existing XML document, then it will just change the parts of
     #| that backing storage that it understands, and aim to leave the rest of

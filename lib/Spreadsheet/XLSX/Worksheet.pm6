@@ -239,6 +239,17 @@ class Spreadsheet::XLSX::Worksheet {
         $!backing-path // $!proposed-path
     }
 
+    #| Synchronizes all changes to the internal representation of the
+    #| archive.
+    method sync-to-archive(--> Nil) {
+        # If we have a backing path, but never loaded from it, then we
+        # don't need to update the archive.
+        return if $!backing-path.defined && !$!backing.defined;
+
+        # Otherwise, update the XML.
+        $!root.set-file-in-archive($.archive-path, self.to-xml().encode('utf-8'));
+    }
+
     #| Produce XML for the worksheet.
     method to-xml(--> Str) {
         # Create a stub worksheet document if we weren't loaded from

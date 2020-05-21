@@ -136,4 +136,47 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
     method get-file-from-archive(Str $path --> Blob) {
         $!archive{$path} // fail "No such file '$path' in archive"
     }
+
+    #| Set the content of a file in the archive, replacing any existing
+    #| content.
+    method set-file-in-archive(Str $path, Blob $content --> Nil) {
+        $!archive{$path} = $content;
+    }
+
+    #| Serializes the current state of the spreadsheet into XLSX format
+    #| and returns a Blob containing it.
+    method to-blob(--> Blob) {
+        # Get the archive hash updated with all changes.
+        self.sync-to-archive();
+
+        # Serialize it to a ZIP.
+        my $buffer = Buf.new;
+        given archive-write($buffer, format => 'zip') -> $archive {
+            for $!archive.kv -> $path, $blob {
+                $archive.write($path, $blob);
+            }
+            $archive.close;
+        }
+        return $buffer;
+    }
+
+    #| Synchronizes all changes to the internal representation of the
+    #| archive. This is performed automatically before saving, and there
+    #| is no need to explicitly perform it.
+    method sync-to-archive(--> Nil) {
+        # Sync the content types; even if we didn't change these, they
+        # need to be saved.
+        $!archive //= {};
+        $!archive{'[Content_Types].xml'} = $!content-types.to-xml().encode('utf-8');
+
+        # Sync any relationships objects we have; we only have these if we read
+        # them, and so potentially modified them. Untouched ones won't need to
+        # be updated.
+        for %!relationships.values -> Spreadsheet::XLSX::Relationships $rels {
+            $!archive{self!rel-path($rels.for)} = $rels.to-xml().encode('utf-8');
+        }
+
+        # Sync the workbook, which will in turn handle sync of anything it owns.
+        $!workbook.sync-to-archive();
+    }
 }
