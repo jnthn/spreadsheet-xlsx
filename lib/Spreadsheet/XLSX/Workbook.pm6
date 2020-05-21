@@ -134,7 +134,7 @@ class Spreadsheet::XLSX::Workbook {
             $!backing .= new: :version('1.0'), :enc('UTF-8');
             $!backing.setStandalone(LibXML::Document::XmlStandaloneNo);
             my LibXML::Element $root = $!backing.createElementNS(
-                    'http://schemas.openxmlformats.org/package/2006/content-types',
+                    'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
                     'workbook');
             $root.addNamespace('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'r');
             $!backing.setDocumentElement($root);
