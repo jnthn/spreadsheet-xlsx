@@ -116,7 +116,7 @@ class Spreadsheet::XLSX::Relationships {
         my LibXML::Document $doc .= new: :version('1.0'), :enc('UTF-8');
         $doc.setStandalone(LibXML::Document::XmlStandaloneNo);
         my LibXML::Element $root = $doc.createElementNS(
-                'http://schemas.openxmlformats.org/package/2006/content-types',
+                'http://schemas.openxmlformats.org/package/2006/relationships',
                 'Relationships');
         $doc.setDocumentElement($root);
 
