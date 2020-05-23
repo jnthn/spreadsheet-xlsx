@@ -99,6 +99,18 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
                 is .value, 10, 'Read cell value 3;2 (number)';
             }
             nok .cells[4;0].defined, 'Unset cell returns undefined';
+
+            given .columns {
+                is .elems, 3, 'Have 3 column records set';
+                given .[0] {
+                    is .custom-width, True, 'Has a custom width (1)';
+                    is .width, 22.140625, 'Custom width is as expected (1)';
+                }
+                given .[1] {
+                    is .custom-width, True, 'Has a custom width (2)';
+                    is .width, 32, 'Custom width is as expected (2)';
+                }
+            }
         }
         given .[1] {
             is .id, 2, 'Correct ID of second worksheet';

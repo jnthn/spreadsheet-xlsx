@@ -70,6 +70,12 @@ given $sheet.workbook {
             'Can successfully assign a number cell into the worksheet';
     is $new-sheet-a.cells[0;1].value, 42,
             'Cell value is as expected';
+
+    $new-sheet-a.columns[0] = Spreadsheet::XLSX::Worksheet::Column.new:
+            :custom-width, :width(32);
+    is $new-sheet-a.columns[0].width, 32, 'Can set a column width';
+    $new-sheet-a.columns[2] = Spreadsheet::XLSX::Worksheet::Column.new:
+            :custom-width, :width(28.5);
 }
 
 given $sheet.content-types {
@@ -100,13 +106,24 @@ given $reloaded.worksheets {
     is .elems, 2, 'Workbook has two worksheets';
     is .[0].name, 'Test A', 'First worksheet has correct name';
     is .[1].name, 'Test B', 'Second worksheet has correct name';
+
     given .[0].cells[0;0] {
         isa-ok $_, Spreadsheet::XLSX::Cell::Text;
-        is .value, 'Beef burrito', 'Can successfully a written text value';
+        is .value, 'Beef burrito', 'Can successfully read a written text value';
     }
     given .[0].cells[0;1] {
         isa-ok $_, Spreadsheet::XLSX::Cell::Number;
-        is .value, 42, 'Can successfully a written number value';
+        is .value, 42, 'Can successfully read a written number value';
+    }
+
+    given .[0].columns[0] {
+        is .custom-width, True, 'Custom width column property saved (1)';
+        is .width, 32, 'Custom width saved (1)';
+    }
+    nok .[0].columns[1].defined, 'No column data for column without anything set';
+    given .[0].columns[2] {
+        is .custom-width, True, 'Custom width column property saved (3)';
+        is .width, 28.5, 'Custom width saved (3)';
     }
 }
 

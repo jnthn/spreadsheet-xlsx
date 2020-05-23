@@ -55,7 +55,7 @@ class Spreadsheet::XLSX::Worksheet {
 
         method !maybe-load-from-backing(Int $row, Int $col) {
             with self!lookup-backing-row($row) -> LibXML::Element $backing-row {
-                my ($from, $to) = self!get-attribute($backing-row, "spans").split(':');
+                my ($from, $to) = get-attribute($backing-row, "spans").split(':');
                 if $from <= $col + 1 <= $to {
                     my LibXML::Element $doc-col = $backing-row.childNodes[$col - ($from - 1)];
                     if $doc-col && $doc-col.nodeName eq 'c' {
@@ -71,7 +71,7 @@ class Spreadsheet::XLSX::Worksheet {
                 unless @!backing-rows {
                     $!backing.childNodes.map: -> LibXML::Element $backing-row {
                         if $backing-row.nodeName eq 'row' {
-                            my $row-str = self!get-attribute($backing-row, 'r');
+                            my $row-str = get-attribute($backing-row, 'r');
                             @!backing-rows[$row-str.Int - 1] = $backing-row;
                         }
                     }
@@ -81,7 +81,7 @@ class Spreadsheet::XLSX::Worksheet {
         }
 
         method !load-cell(LibXML::Element $cell --> Spreadsheet::XLSX::Cell) {
-            my $type = self!get-attribute($cell, 't', :optional) // '';
+            my $type = get-attribute($cell, 't', :optional) // '';
             if $type eq 's' {
                 my LibXML::Element $shared-index-holder = $cell.first;
                 unless $shared-index-holder.nodeName eq 'v' {
@@ -92,19 +92,6 @@ class Spreadsheet::XLSX::Worksheet {
             }
             else {
                 cell-from-xml($cell)
-            }
-        }
-
-        method !get-attribute(LibXML::Element $entry, Str $name, :$optional --> Str) {
-            with $entry.getAttributeNode($name) -> LibXML::Attr $attr {
-                $attr.string-value
-            }
-            elsif $optional {
-                Nil
-            }
-            else {
-                die X::Spreadsheet::XLSX::Format.new: message =>
-                        "Missing attribute '$name' on '$entry.nodeName()'";
             }
         }
 
@@ -131,7 +118,7 @@ class Spreadsheet::XLSX::Worksheet {
                 # Build a map of existing cells in the row, identified by their
                 # cell name (A2, B2, etc.)
                 my %existing-cells = $row-xml.childNodes.map({
-                    self!get-attribute($_, 'r') => $_
+                    get-attribute($_, 'r') => $_
                 });
 
                 # Go over the cells we have a value for. These are the ones we
@@ -184,12 +171,77 @@ class Spreadsheet::XLSX::Worksheet {
         }
     }
 
+    #| Properties associated with a column in a worksheet.
+    class Column {
+        has Real $.width;
+        has Int $!style-id;
+        has Bool $.hidden;
+        has Bool $.best-fit;
+        has Bool $.custom-width;
+        has Bool $.phonetic;
+        has Int $.outline-level;
+        has Bool $.collapsed;
+
+        submethod TWEAK(Int :$!style-id) { }
+
+        #| Load the column from the XML col element.
+        method from-xml(LibXML::Element $col --> Column) {
+            my %properties;
+            with get-attribute($col, 'width', :optional) {
+                %properties<width> = +$_;
+            }
+            with get-attribute($col, 'style', :optional) {
+                %properties<style-id> = .Int;
+            }
+            with get-boolean-attribute($col, 'hidden', :optional) {
+                %properties<hidden> = $_;
+            }
+            with get-boolean-attribute($col, 'bestFit', :optional) {
+                %properties<best-fit> = $_;
+            }
+            with get-boolean-attribute($col, 'customWidth', :optional) {
+                %properties<custom-width> = $_;
+            }
+            with get-boolean-attribute($col, 'phonetic', :optional) {
+                %properties<phonetic> = $_;
+            }
+            with get-attribute($col, 'outlineLevel', :optional) {
+                %properties<outline-level> = .Int;
+            }
+            with get-boolean-attribute($col, 'collapsed', :optional) {
+                %properties<collapsed> = $_;
+            }
+            self.new(|%properties)
+        }
+
+        #| Given a col XML element, set attributes on it based on what is
+        #| configured in this object.
+        method set-xml-attributes(LibXML::Document $backing, LibXML::Element $col-xml --> Nil) {
+            $col-xml.add($backing.createAttribute('width', ~$_)) with $!width;
+            $col-xml.add($backing.createAttribute('style', ~$_)) with $!style-id;
+            $col-xml.add($backing.createAttribute('hidden', bool-xml($_))) with $!hidden;
+            $col-xml.add($backing.createAttribute('bestFit', bool-xml($_))) with $!best-fit;
+            $col-xml.add($backing.createAttribute('customWidth', bool-xml($_))) with $!custom-width;
+            $col-xml.add($backing.createAttribute('phonetic', bool-xml($_))) with $!phonetic;
+            $col-xml.add($backing.createAttribute('outlineLevel', ~$_)) with $!outline-level;
+            $col-xml.add($backing.createAttribute('collapsed', bool-xml($_))) with $!collapsed;
+        }
+
+        sub bool-xml($value) {
+            $value ?? 'true' !! 'false'
+        }
+    }
+
     #| The cached backing document, if we have one.
     has LibXML::Document $!backing;
 
     #| The cached cells object, created lazily if we have a backing
     #| document.
     has Cells $!cells;
+
+    #| Array of columns. Populated from an existing worksheet on
+    #| first access.
+    has Array $!columns;
 
     submethod TWEAK(Str :$!backing-path, Str :$!proposed-path --> Nil) {}
 
@@ -213,6 +265,27 @@ class Spreadsheet::XLSX::Worksheet {
         else {
             Cells.new(:worksheet(self))
         }
+    }
+
+    #| Get column properties for the worksheet. Each column that has some
+    #| associated properties will have an instance.
+    method columns(--> Array) {
+        $!columns //= self!setup-columns();
+    }
+
+    method !setup-columns() {
+        my @columns;
+        with $!backing-path {
+            my LibXML::Element $doc-root := self!get-backing-document().documentElement();
+            with $doc-root.childNodes.list.first(*.nodeName eq 'cols') -> LibXML::Element $cols {
+                for $cols.childNodes -> LibXML::Element $col {
+                    for get-attribute($col, 'min').Int .. get-attribute($col, 'max').Int {
+                        @columns[$_ - 1] = Column.from-xml($col);
+                    }
+                }
+            }
+        }
+        return @columns;
     }
 
     method !get-backing-document(--> LibXML::Document) {
@@ -276,6 +349,61 @@ class Spreadsheet::XLSX::Worksheet {
                     message => 'Missing sheetData element';
         }
 
+        # Update the column data.
+        with $!columns {
+            my $cols-xml = @node-list.first(*.name eq 'cols');
+            if $!columns.first(*.defined) {
+                # We have columns info to save.
+                without $cols-xml {
+                    $cols-xml = $!backing.createElement('cols');
+                    $!backing.documentElement.add($cols-xml);
+                }
+                self!sync-columns-into($cols-xml);
+            }
+            else {
+                # No columns. An empty cols node is disallowed per the
+                # schema, so we must delete it if present.
+                with $cols-xml {
+                    $!backing.documentElement.removeChild($cols-xml);
+                }
+            }
+        }
+
         return $!backing.Str;
+    }
+
+    method !sync-columns-into(LibXML::Element $cols) {
+        for $!columns.kv -> Int $idx, $col {
+            with $col {
+                my $col-xml = $!backing.createElement('col');
+                my $idx-str = ($idx + 1).Str;
+                $col-xml.add($!backing.createAttribute('min', $idx-str));
+                $col-xml.add($!backing.createAttribute('max', $idx-str));
+                $col.set-xml-attributes($!backing, $col-xml);
+                $cols.add($col-xml);
+            }
+        }
+    }
+
+    sub get-attribute(LibXML::Element $entry, Str $name, :$optional --> Str) {
+        with $entry.getAttributeNode($name) -> LibXML::Attr $attr {
+            $attr.string-value
+        }
+        elsif $optional {
+            Nil
+        }
+        else {
+            die X::Spreadsheet::XLSX::Format.new: message =>
+            "Missing attribute '$name' on '$entry.nodeName()'";
+        }
+    }
+
+    sub get-boolean-attribute(LibXML::Element $entry, Str $name, :$optional --> Bool) {
+        with get-attribute($entry, $name, :$optional) {
+            so $_ eq 'true' | '1'
+        }
+        else {
+            Nil
+        }
     }
 }
