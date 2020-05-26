@@ -18,7 +18,7 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
 
     #| The workbook itself.
     has Spreadsheet::XLSX::Workbook $.workbook
-            handles <create-worksheet worksheets shared-strings>;
+            handles <create-worksheet worksheets shared-strings styles>;
 
     #| Load an Excel workbook from the file path identified by the given string.
     multi method load(Str $file --> Spreadsheet::XLSX) {
@@ -164,10 +164,8 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
     #| archive. This is performed automatically before saving, and there
     #| is no need to explicitly perform it.
     method sync-to-archive(--> Nil) {
-        # Sync the content types; even if we didn't change these, they
-        # need to be saved.
-        $!archive //= {};
-        $!archive{'[Content_Types].xml'} = $!content-types.to-xml().encode('utf-8');
+        # Sync the workbook, which will in turn handle sync of anything it owns.
+        $!workbook.sync-to-archive();
 
         # Sync any relationships objects we have; we only have these if we read
         # them, and so potentially modified them. Untouched ones won't need to
@@ -176,7 +174,9 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
             $!archive{self!rel-path($rels.for)} = $rels.to-xml().encode('utf-8');
         }
 
-        # Sync the workbook, which will in turn handle sync of anything it owns.
-        $!workbook.sync-to-archive();
+        # Sync the content types; even if we didn't change these, they
+        # need to be saved.
+        $!archive //= {};
+        $!archive{'[Content_Types].xml'} = $!content-types.to-xml().encode('utf-8');
     }
 }

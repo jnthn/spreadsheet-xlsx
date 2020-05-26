@@ -97,7 +97,8 @@ class Spreadsheet::XLSX::Worksheet {
 
         #| Synchronize the values of cells we've set/changed with the
         #| sheet data XML document.
-        method sync-sheet-data-xml(LibXML::Element $sheetData --> Nil) {
+        method sync-sheet-data-xml(LibXML::Element $sheetData,
+                Spreadsheet::XLSX::Styles $styles --> Nil) {
             # Look through the rows we have cell data for; these are ones we
             # have looked at or potentially modified.
             my LibXML::Document $document = $sheetData.getOwnerDocument;
@@ -135,7 +136,7 @@ class Spreadsheet::XLSX::Worksheet {
                         # Obtain the cell node from the existing document or
                         # make a new one.
                         my $cell-name = self!cell-name($row-idx, $col-idx);
-                        my $cell-xml = do with %existing-cells{$cell-name} {
+                        my LibXML::Element $cell-xml = do with %existing-cells{$cell-name} {
                             $_
                         }
                         else {
@@ -147,6 +148,22 @@ class Spreadsheet::XLSX::Worksheet {
 
                         # Sync the data to it.
                         $cell.sync-value-xml($document, $cell-xml);
+
+                        # Sync the style.
+                        my $s-attr = $cell-xml.getAttributeNode('s');
+                        with $cell.style {
+                            with .sync-style-id($styles) -> $style-id {
+                                with $s-attr {
+                                    $s-attr.setValue(~$style-id);
+                                }
+                                else {
+                                    $cell-xml.add($document.createAttribute('s', ~$style-id));
+                                }
+                            }
+                        }
+                        orwith $s-attr {
+                            $cell-xml.removeChild($s-attr);
+                        }
                     }
                 }
 
@@ -342,7 +359,7 @@ class Spreadsheet::XLSX::Worksheet {
         # Update the sheet data.
         my @node-list := $!backing.documentElement.childNodes.list;
         with @node-list.first(*.name eq 'sheetData') -> LibXML::Element $sheetData {
-            .sync-sheet-data-xml($sheetData) with $!cells;
+            .sync-sheet-data-xml($sheetData, $!root.styles) with $!cells;
         }
         else {
             die X::Spreadsheet::XLSX::Format.new:

@@ -77,7 +77,7 @@ class Spreadsheet::XLSX::ContentTypes {
     }
 
     #| Adds an override.
-    method add-override(Str :$part-name!, Str :$content-type --> Override) {
+    method add-override(Str :$part-name!, Str :$content-type! --> Override) {
         my $override = Override.new(:$part-name, :$content-type);
         @!overrides.push($override);
         return $override;

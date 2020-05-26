@@ -1,8 +1,12 @@
 use LibXML::Document;
+use Spreadsheet::XLSX::CellStyle;
 use Spreadsheet::XLSX::Exceptions;
 
 #| Commonalities of all kinds of cell.
 role Spreadsheet::XLSX::Cell {
+    #| Cell styling information.
+    has Spreadsheet::XLSX::CellStyle $.style .= new;
+
     #| Sync the value to XML.
     method sync-value-xml(LibXML::Document $document, LibXML::Element $col --> Nil) { ... }
 }

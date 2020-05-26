@@ -3,6 +3,7 @@ use Spreadsheet::XLSX::Exceptions;
 use Spreadsheet::XLSX::Relationships;
 use Spreadsheet::XLSX::Root;
 use Spreadsheet::XLSX::SharedStrings;
+use Spreadsheet::XLSX::Styles;
 use Spreadsheet::XLSX::Worksheet;
 
 #| The XLSX workbook
@@ -16,15 +17,20 @@ class Spreadsheet::XLSX::Workbook {
     #| The shared strings of the workbook.
     has Spreadsheet::XLSX::SharedStrings $.shared-strings;
 
+    #| The styles of the workbook.
+    has Spreadsheet::XLSX::Styles $.styles;
+
     #| The list of worksheets in the workbook.
     has @!worksheets;
 
     #| The backing XML document, if any.
     has LibXML::Document $!backing;
 
-    submethod TWEAK(LibXML::Document :$!backing, :@!worksheets --> Nil) {}
+    submethod TWEAK(LibXML::Document :$!backing, :@!worksheets --> Nil) {
+        $!styles //= Spreadsheet::XLSX::Styles.new(:$!root);
+    }
 
-    #| Parse the XML content of a relationships file.
+    #| Parse the XML content of a workbook file.
     method from-xml(Str $xml, Spreadsheet::XLSX::Root :$root!,
                     Spreadsheet::XLSX::Relationships :$relationships!) {
         my LibXML::Document $doc .= parse(:string($xml));
@@ -48,7 +54,9 @@ class Spreadsheet::XLSX::Workbook {
                 }
             }
             my $shared-strings = get-shared-strings($root, $relationships);
-            self.new(:$root, :$relationships, :@worksheets, :$shared-strings, :backing($doc))
+            my $styles = get-styles($root, $relationships);
+            self.new(:$root, :$relationships, :@worksheets, :$shared-strings,
+                    :$styles, :backing($doc))
         }
         else {
             die X::Spreadsheet::XLSX::Format.new: message =>
@@ -64,6 +72,21 @@ class Spreadsheet::XLSX::Workbook {
             else {
                 die X::Spreadsheet::XLSX::Format.new: message =>
                         "Could not find shared strings file $rel.target()"
+            }
+        }
+        else {
+            Spreadsheet::XLSX::SharedStrings.empty(:$root)
+        }
+    }
+
+    sub get-styles(Spreadsheet::XLSX::Root $root, Spreadsheet::XLSX::Relationships $relationships) {
+        with $relationships.find-by-type('http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles').first -> $rel {
+            with $root.get-file-from-archive($rel.target) {
+                Spreadsheet::XLSX::Styles.from-xml(.decode('utf-8'), :$root)
+            }
+            else {
+                die X::Spreadsheet::XLSX::Format.new: message =>
+                        "Could not find styles file $rel.target()"
             }
         }
         else {
@@ -123,10 +146,26 @@ class Spreadsheet::XLSX::Workbook {
         # Save the XML of this workbook.
         $!root.set-file-in-archive($!relationships.for, self.to-xml().encode('utf-8'));
 
-        # And then the worksheets.
+        # And then the worksheets (which will sync the styles used by
+        # cells also).
         for @!worksheets {
             .sync-to-archive;
         }
+
+        # Sync the styles.
+        my constant $style-type = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles';
+        my $styles-path = do with $!relationships.find-by-type($style-type).first {
+            .target
+        }
+        else {
+            my $target = 'xl/styles.xml';
+            $!relationships.add(:$target, :type($style-type));
+            $!root.content-types.add-override:
+                    part-name => "/$target",
+                    content-type => 'application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml';
+            $target
+        }
+        $!root.set-file-in-archive($styles-path, $!styles.to-xml().encode('utf-8'));
     }
 
     #| Form an XML representation of the workbook. If the workbook was loaded
