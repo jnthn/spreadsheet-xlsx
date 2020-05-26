@@ -161,6 +161,20 @@ class Spreadsheet::XLSX::Styles {
         :JustifyVerticalAlign<justify>, :DistributedVerticalAlign<distributed>,
     );
 
+    #| A number format.
+    class NumberFormat {
+        has Int $.id;
+        has Str $.code;
+
+        #| Produce an XML element containing the number format information.
+        method to-xml-element(LibXML::Document $doc --> LibXML::Element) {
+            my $numFmt = $doc.createElement('numFmt');
+            $numFmt.add($doc.createAttribute('numFmtId', ~$!id));
+            $numFmt.add($doc.createAttribute('formatCode', ~$!code));
+            return $numFmt;
+        }
+    }
+
     #| Cell alignment formatting. Part of a Format.
     class CellAlignment {
         has HorizontalAlign $.horizontal;
@@ -209,20 +223,20 @@ class Spreadsheet::XLSX::Styles {
         #| Produce an XML element containing the format information.
         method to-xml-element(LibXML::Document $doc --> LibXML::Element) {
             my $xf = $doc.createElement('xf');
-            $xf.add($doc.createAttribute('fontId', ~($_ // 0))) with $!font-id;
-            $xf.add($doc.createAttribute('fillId', ~($_ // 0))) with $!fill-id;
-            $xf.add($doc.createAttribute('borderId', ~($_ // 0))) with $!border-id;
+            $xf.add($doc.createAttribute('fontId', ~$_)) with $!font-id;
+            $xf.add($doc.createAttribute('fillId', ~$_)) with $!fill-id;
+            $xf.add($doc.createAttribute('borderId', ~$_)) with $!border-id;
+            $xf.add($doc.createAttribute('numFmtId', ~$_)) with $!number-format-id;
             $xf.add($doc.createAttribute('applyFont', '1')) if $!apply-font;
             $xf.add($doc.createAttribute('applyFill', '1')) if $!apply-fill;
             $xf.add($doc.createAttribute('applyBorder', '1')) if $!apply-border;
             $xf.add($doc.createAttribute('applyAlignment', '1')) if $!apply-alignment;
+            $xf.add($doc.createAttribute('applyNumberFormat', '1')) if $!apply-number-format;
             $xf.add(.to-xml-element($doc)) with $!alignment;
             # TODO
-            #	<attribute name="numFmtId" type="ST_NumFmtId" use="optional"/>
             #	<attribute name="xfId" type="ST_CellStyleXfId" use="optional"/>
             #	<attribute name="quotePrefix" type="xsd:boolean" use="optional" default="false"/>
             #	<attribute name="pivotButton" type="xsd:boolean" use="optional" default="false"/>
-            #	<attribute name="applyNumberFormat" type="xsd:boolean" use="optional"/>
             #	<attribute name="applyProtection" type="xsd:boolean" use="optional"/>
             return $xf;
         }
@@ -236,6 +250,13 @@ class Spreadsheet::XLSX::Styles {
 
     #| All border records in the styles.
     has Border @.borders;
+
+    #| All number format records.
+    has NumberFormat @.number-formats;
+
+    #| Every number format has an ID, but some IDs are allocated with
+    #| existing meanings. Thus, we track the maximum number of those.
+    has Int $!max-number-format-id = @!number-formats.map(*.id).max max 166;
 
     #| All formatting records (referenced from cell formats).
     has Format @.formatting-records;
@@ -261,7 +282,8 @@ class Spreadsheet::XLSX::Styles {
     }
 
     #| Obtain a style ID for the specified combination of stylings.
-    method obtain-style-id-for(Font :$font, CellAlignment :$alignment --> Int) {
+    method obtain-style-id-for(Font :$font, CellAlignment :$alignment,
+                               Str :$number-format --> Int) {
         # Here we really should be clever and re-use existing IDs.
         # However, for now, we just add everything we're given afresh.
         my %ids;
@@ -273,6 +295,17 @@ class Spreadsheet::XLSX::Styles {
         with $alignment {
             %ids<alignment> = $_;
             %ids<apply-alignment> = True;
+        }
+        with $number-format {
+            with @!number-formats.first(*.code eq $number-format) {
+                %ids<number-format-id> = .id;
+            }
+            else {
+                my $id = ++$!max-number-format-id;
+                @!number-formats.push(NumberFormat.new(:$id, :code($number-format)));
+                %ids<number-format-id> = $id;
+            }
+            %ids<apply-number-format> = True;
         }
         my $style-id = @!cell-formats.elems;
         @!cell-formats.push(Format.new(|%ids));
@@ -290,6 +323,7 @@ class Spreadsheet::XLSX::Styles {
         $doc.setDocumentElement($root);
 
         # Store all the parts.
+        self!add-part($doc, $root, 'numFmts', @!number-formats);
         self!add-part($doc, $root, 'fonts', @!fonts);
         self!add-part($doc, $root, 'fills', @!fills);
         self!add-part($doc, $root, 'borders', @!borders);

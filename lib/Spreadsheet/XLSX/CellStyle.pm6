@@ -25,13 +25,14 @@ class Spreadsheet::XLSX::CellStyle {
         font => %(
             'bold' => Property.new(type => Bool),
             'italic' => Property.new(type => Bool),
-            'font-size' => Property.new(type => Int, attr-name => 'sz'),
+            'font-size' => Property.new(type => Int, attr-name => 'size'),
         ),
         alignment => %(
             'horizontal-align' => Property.new(type => HorizontalAlign, attr-name => 'horizontal'),
             'vertical-align' => Property.new(type => VerticalAlign, attr-name => 'vertical'),
             'wrap-text' => Property.new(type => Bool),
-        )
+        ),
+        format => %( number-format => Property.new(type => Str) )
     );
 
     submethod TWEAK(Int :$!style-id --> Nil) {}
@@ -64,6 +65,11 @@ class Spreadsheet::XLSX::CellStyle {
     #| Whether text in the cell should be wrapped.
     method wrap-text(--> Bool) is rw {
         self!property('alignment', 'wrap-text')
+    }
+
+    #| The number format.
+    method number-format(--> Str) is rw {
+        self!property('format', 'number-format')
     }
 
     #| Produce a proxy for reading/writing the property.
@@ -107,7 +113,8 @@ class Spreadsheet::XLSX::CellStyle {
             }
             my $font = self!build-group(Spreadsheet::XLSX::Styles::Font, 'font');
             my $alignment = self!build-group(Spreadsheet::XLSX::Styles::CellAlignment, 'alignment');
-            my $style-id = $styles.obtain-style-id-for(:$font, :$alignment);
+            my $number-format = %!changed<number-format> // Str;
+            my $style-id = $styles.obtain-style-id-for(:$font, :$alignment, :$number-format);
             %!changed = ();
             $style-id
         }
