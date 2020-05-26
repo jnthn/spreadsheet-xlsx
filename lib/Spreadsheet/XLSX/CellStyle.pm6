@@ -16,55 +16,78 @@ class Spreadsheet::XLSX::CellStyle {
     #| Metadata about a style property, describing their backing in the
     #| underlying style store.
     my class Property {
-        has Mu $.type;
+        has Mu $.type is required;
+        has Str $.attr-name;
     }
 
     #| Style properties metadata.
     my constant %properties = %(
-        'bold' => Property.new(type => Bool),
-        'italic' => Property.new(type => Bool),
-        'font-size' => Property.new(type => Int),
+        font => %(
+            'bold' => Property.new(type => Bool),
+            'italic' => Property.new(type => Bool),
+            'font-size' => Property.new(type => Int, attr-name => 'sz'),
+        ),
+        alignment => %(
+            'horizontal-align' => Property.new(type => HorizontalAlign, attr-name => 'horizontal'),
+            'vertical-align' => Property.new(type => VerticalAlign, attr-name => 'vertical'),
+            'wrap-text' => Property.new(type => Bool),
+        )
     );
 
     submethod TWEAK(Int :$!style-id --> Nil) {}
 
     #| Should a bold font be used.
     method bold(--> Bool) is rw {
-        self!property('bold')
+        self!property('font', 'bold')
     }
 
     #| Should an italic font be used.
     method italic(--> Bool) is rw {
-        self!property('italic')
+        self!property('font', 'italic')
     }
 
     #| The size of font to use.
     method font-size(--> Int) is rw {
-        self!property('font-size')
+        self!property('font', 'font-size')
+    }
+
+    # The horizontal alignment of a cell.
+    method horizontal-align(--> HorizontalAlign) is rw {
+        self!property('alignment', 'horizontal-align')
+    }
+
+    # The vertical alignment of a cell.
+    method vertical-align(--> VerticalAlign) is rw {
+        self!property('alignment', 'vertical-align')
+    }
+
+    #| Whether text in the cell should be wrapped.
+    method wrap-text(--> Bool) is rw {
+        self!property('alignment', 'wrap-text')
     }
 
     #| Produce a proxy for reading/writing the property.
-    method !property(Str $key) is rw {
+    method !property(Str $group, Str $key) is rw {
         Proxy.new:
                 FETCH => -> | {
-                    %!changed{$key} // self!fetch($key)
+                    %!changed{$key} // self!fetch($group, $key)
                 },
                 STORE => -> \p, $value {
-                    %!changed{$key} = self!check-type($key, $value)
+                    %!changed{$key} = self!check-type($group, $key, $value)
                 }
     }
 
-    method !fetch($key) {
+    method !fetch(Str $group, Str $key) {
         with $!style-id {
             die X::NYI.new(feature => 'Reading styles');
         }
         else {
-            %properties{$key}.type
+            %properties{$group}{$key}.type
         }
     }
 
-    method !check-type($key, $value) {
-        my $type = do %properties{$key}.type;
+    method !check-type(Str $group, Str $key, $value) {
+        my $type = %properties{$group}{$key}.type;
         unless $value ~~ $type {
             die X::TypeCheck::Assignment.new:
                     got => $value,
@@ -82,8 +105,9 @@ class Spreadsheet::XLSX::CellStyle {
             with $!style-id {
                 die X::NYI.new(feature => 'saving changes to existing styles');
             }
-            my Spreadsheet::XLSX::Styles::Font $font = self!build-font();
-            my $style-id = $styles.obtain-style-id-for(:$font);
+            my $font = self!build-group(Spreadsheet::XLSX::Styles::Font, 'font');
+            my $alignment = self!build-group(Spreadsheet::XLSX::Styles::CellAlignment, 'alignment');
+            my $style-id = $styles.obtain-style-id-for(:$font, :$alignment);
             %!changed = ();
             $style-id
         }
@@ -92,13 +116,13 @@ class Spreadsheet::XLSX::CellStyle {
         }
     }
 
-    method !build-font(--> Spreadsheet::XLSX::Styles::Font) {
+    method !build-group(Mu $type, Str $group) {
         my %props;
-        %props<bold> = $_ with %!changed<bold>;
-        %props<italic> = $_ with %!changed<italic>;
-        %props<size> = $_ with %!changed<font-size>;
-        return %props
-                ?? Spreadsheet::XLSX::Styles::Font.new(|%props)
-                !! Nil;
+        for %properties{$group}.kv -> $prop, Property $metadata {
+            with %!changed{$prop} {
+                %props{$metadata.attr-name // $prop} = $_;
+            }
+        }
+        return %props ?? $type.new(|%props) !! $type;
     }
 }

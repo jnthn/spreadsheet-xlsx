@@ -12,7 +12,7 @@ class Spreadsheet::XLSX::Styles {
     );
 
     #| Vertical alignments.
-    enum VerticalAlign is export (
+    enum VerticalAlignRun is export (
         :Baseline<baseline>, :Subscript<subscript>, :Superscript<superscript>
     );
 
@@ -36,7 +36,7 @@ class Spreadsheet::XLSX::Styles {
         # TODO color, which is annoyingly involved
         has Real $.size;
         # TODO underline, which needs another enum
-        has VerticalAlign $.vertical-align;
+        has VerticalAlignRun $.vertical-align;
         has FontScheme $.scheme;
 
         #| Produce an XML element containing the font information.
@@ -148,11 +148,17 @@ class Spreadsheet::XLSX::Styles {
         }
     }
 
-    #| Horizontal alignments.
+    #| Horizontal alignment for cells.
     enum HorizontalAlign is export (
         :GeneralAlign<general>, :LeftAlign<left>, :CenterAlign<center>,
         :RightAlign<right>, :FillAlign<fill>, :JustifyAlign<justify>,
         :CenterContinuousAlign<centerContinuous>,  :DistributedAlign<distributed>
+    );
+
+    #| Vertical alignment for cells.
+    enum VerticalAlign is export (
+        :TopVerticalAlign<top>, :CenterVerticalAlign<center>, :BottomVerticalAlign<bottom>,
+        :JustifyVerticalAlign<justify>, :DistributedVerticalAlign<distributed>,
     );
 
     #| Cell alignment formatting. Part of a Format.
@@ -166,15 +172,21 @@ class Spreadsheet::XLSX::Styles {
         has Bool $.justify-last-line;
         has Bool $.shrink-to-fit;
         has Int $.reading-order;
-        #`(	<attribute name="horizontal" type="ST_HorizontalAlignment" use="optional"/>
-        #	<attribute name="vertical" type="ST_VerticalAlignment" use="optional"/>
-        #	<attribute name="textRotation" type="xsd:unsignedInt" use="optional"/>
-        #	<attribute name="wrapText" type="xsd:boolean" use="optional"/>
-        #	<attribute name="indent" type="xsd:unsignedInt" use="optional"/>
-        #	<attribute name="relativeIndent" type="xsd:int" use="optional"/>
-        #	<attribute name="justifyLastLine" type="xsd:boolean" use="optional"/>
-        #	<attribute name="shrinkToFit" type="xsd:boolean" use="optional"/>
-        #	<attribute name="readingOrder" type="xsd:unsignedInt" use="optional"/>)
+
+        #| Produce an XML element containing the alignment information.
+        method to-xml-element(LibXML::Document $doc --> LibXML::Element) {
+            my $alignment = $doc.createElement('alignment');
+            $alignment.add($doc.createAttribute('horizontal', .value)) with $!horizontal;
+            $alignment.add($doc.createAttribute('vertical', .value)) with $!vertical;
+            $alignment.add($doc.createAttribute('wrapText', '1')) if $!wrap-text;
+            #	<attribute name="textRotation" type="xsd:unsignedInt" use="optional"/>
+            #	<attribute name="indent" type="xsd:unsignedInt" use="optional"/>
+            #	<attribute name="relativeIndent" type="xsd:int" use="optional"/>
+            #	<attribute name="justifyLastLine" type="xsd:boolean" use="optional"/>
+            #	<attribute name="shrinkToFit" type="xsd:boolean" use="optional"/>
+            #	<attribute name="readingOrder" type="xsd:unsignedInt" use="optional"/>
+            return $alignment;
+        }
     }
 
     #| A format record, bringing together various styling options.
@@ -203,16 +215,14 @@ class Spreadsheet::XLSX::Styles {
             $xf.add($doc.createAttribute('applyFont', '1')) if $!apply-font;
             $xf.add($doc.createAttribute('applyFill', '1')) if $!apply-fill;
             $xf.add($doc.createAttribute('applyBorder', '1')) if $!apply-border;
+            $xf.add($doc.createAttribute('applyAlignment', '1')) if $!apply-alignment;
+            $xf.add(.to-xml-element($doc)) with $!alignment;
             # TODO
-            #   <sequence>
-            #	  <element name="alignment" type="CT_CellAlignment" minOccurs="0" maxOccurs="1"/>
-            #	</sequence>
             #	<attribute name="numFmtId" type="ST_NumFmtId" use="optional"/>
             #	<attribute name="xfId" type="ST_CellStyleXfId" use="optional"/>
             #	<attribute name="quotePrefix" type="xsd:boolean" use="optional" default="false"/>
             #	<attribute name="pivotButton" type="xsd:boolean" use="optional" default="false"/>
             #	<attribute name="applyNumberFormat" type="xsd:boolean" use="optional"/>
-            #	<attribute name="applyAlignment" type="xsd:boolean" use="optional"/>
             #	<attribute name="applyProtection" type="xsd:boolean" use="optional"/>
             return $xf;
         }
@@ -251,7 +261,7 @@ class Spreadsheet::XLSX::Styles {
     }
 
     #| Obtain a style ID for the specified combination of stylings.
-    method obtain-style-id-for(Font :$font --> Int) {
+    method obtain-style-id-for(Font :$font, CellAlignment :$alignment --> Int) {
         # Here we really should be clever and re-use existing IDs.
         # However, for now, we just add everything we're given afresh.
         my %ids;
@@ -259,6 +269,10 @@ class Spreadsheet::XLSX::Styles {
             %ids<font-id> = @!fonts.elems;
             %ids<apply-font> = True;
             @!fonts.push($font);
+        }
+        with $alignment {
+            %ids<alignment> = $_;
+            %ids<apply-alignment> = True;
         }
         my $style-id = @!cell-formats.elems;
         @!cell-formats.push(Format.new(|%ids));
