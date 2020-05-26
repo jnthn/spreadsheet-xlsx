@@ -1,20 +1,73 @@
 # Spreadsheet::XLSX
 
-A Raku module for working with Excel spreadsheets (XLSX format). Provides a
-mutable document object model, which can be created from scratch or parsed
-from an existing file. This can then be written out to an XLSX file also.
+A Raku module for working with Excel spreadsheets (XLSX format), both
+reading existing files, creating new files, or modifying existing files
+and saving the changes. Of note, it:
+
+* Knows how to lazily load sheet content, so if you don't look at a sheet
+  then time won't be spent deserializing it (down to a cell level, even)
+* In the modification scenario, tries to leave as much intact as it can,
+  meaning that it's possible to poke data into a sheet more complex than
+  could be produced by the module from scratch
+* Only depends on the Raku LibXML and Libarchive modules (and their
+  respective native dependencies)
 
 This module is currently in development, and supports the subset of XLSX
 format features that were immediately needed for the use-case it was built
-for.
+for. That isn't so much, for now, but it will handle the most common needs:
+
+* Enumerating worksheets
+* Reading text and numbers from cells on a worksheet
+* Creating new workbooks with worksheets with text and number cells
+* Setting basic styles and number formats on cells in newly created
+  worksheets
+* Reading a workbook, making modifications, and saving it again
+* Reading and writing column properties (such as column width)
 
 ## Synopsis
 
-```raku
-# Create a new spreadsheet.
-my $workbook = Spreadsheet::XLSX.new;
+### Reading existing workbooks
 
-# Or read a workbook from an existing file.
-my $parsed-workbook = Spreadsheet::XLSX.load('accounts.xlsx'); 
+```
+# Read a workbook from an existing file (can pass IO::Path or a
+# Blob in the case it was uploaded).
+my $workbook = Spreadsheet::XLSX.load('accounts.xlsx');
+
+# Get worksheets.
+say "Workbook has {$workbook.worksheets.elems} sheets";
+
+# Get the name of a worksheet.
+say $workbook.worksheets.name;
+
+# Get cell values (indexing is zero-based, done as a multi-dimensional array
+# indexing operation [row ; column].
+say .value with $workbook.worksheets[0;0];      # A1
+say .value with $workbook.worksheets[0;1];      # B1
+say .value with $workbook.worksheets[1;0];      # A2
+say .value with $workbook.worksheets[1;1];      # B2
 ```
 
+### Creating new workbooks
+
+```raku
+# Create a new workbook and add some worksheets to it.
+my $workbook = Spreadsheet::XLSX.new;
+my $sheet-a = $workbook.create-worksheet('Ingredients')
+my $sheet-b = $workbook.create-worksheet('Matching Drinks')
+
+# Put some data into a worksheet and style it.
+$new-sheet-a.cells[0;0] = Spreadsheet::XLSX::Cell::Text.new(value => 'Ingredient');
+$new-sheet-a.cells[0;0].style.bold = True;
+$new-sheet-a.cells[0;1] = Spreadsheet::XLSX::Cell::Text.new(value => 'Quantity');
+$new-sheet-a.cells[0;1].style.bold = True;
+
+# Save it.
+spurt "foo.xlsx", $workbook.to-blob();
+```
+
+## Credits
+
+Thanks goes to [Agrammon](https://agrammon.ch/) for making the development of
+this module possible. If you need further development on the module and are
+willing to fund it (or other Raku ecosystem work), you can get in contact with
+[Edument](https://www.edument.se/en) or [Oetikier+Partner](https://www.oetiker.ch/en/).
