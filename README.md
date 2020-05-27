@@ -55,11 +55,21 @@ my $workbook = Spreadsheet::XLSX.new;
 my $sheet-a = $workbook.create-worksheet('Ingredients')
 my $sheet-b = $workbook.create-worksheet('Matching Drinks')
 
-# Put some data into a worksheet and style it.
+# Put some data into a worksheet and style it. This is how the model
+# actually works (useful if you want to add styles later)...
 $new-sheet-a.cells[0;0] = Spreadsheet::XLSX::Cell::Text.new(value => 'Ingredient');
 $new-sheet-a.cells[0;0].style.bold = True;
 $new-sheet-a.cells[0;1] = Spreadsheet::XLSX::Cell::Text.new(value => 'Quantity');
 $new-sheet-a.cells[0;1].style.bold = True;
+$new-sheet-a.cells[1;0] = Spreadsheet::XLSX::Cell::Text.new(value => 'Eggs');
+$new-sheet-a.cells[1;1] = Spreadsheet::XLSX::Cell::Number.new(value => '6');
+$new-sheet-a.cells[1;1].style.number-format = '#,###';
+
+# However, there is a convenience form too.
+$new-sheet-a.set(0, 0, 'Ingredient', :bold);
+$new-sheet-a.set(0, 1, 'Quantity', :bold);
+$new-sheet-a.set(1, 0, 'Eggs');
+$new-sheet-a.set(1, 1, 6, :number-format('#,###'));
 
 # Save it to a file (string or IO::Path name).
 $workbook.save("foo.xlsx");
