@@ -61,8 +61,11 @@ $new-sheet-a.cells[0;0].style.bold = True;
 $new-sheet-a.cells[0;1] = Spreadsheet::XLSX::Cell::Text.new(value => 'Quantity');
 $new-sheet-a.cells[0;1].style.bold = True;
 
-# Save it.
-spurt "foo.xlsx", $workbook.to-blob();
+# Save it to a file (string or IO::Path name).
+$workbook.save("foo.xlsx");
+
+# Or get it as a blob, e.g. for a HTTP response.
+my $blob = $workbook.to-blob();
 ```
 
 ## Credits
