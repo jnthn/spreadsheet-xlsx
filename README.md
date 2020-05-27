@@ -70,4 +70,4 @@ spurt "foo.xlsx", $workbook.to-blob();
 Thanks goes to [Agrammon](https://agrammon.ch/) for making the development of
 this module possible. If you need further development on the module and are
 willing to fund it (or other Raku ecosystem work), you can get in contact with
-[Edument](https://www.edument.se/en) or [Oetikier+Partner](https://www.oetiker.ch/en/).
+[Edument](https://www.edument.se/en) or [Oetiker+Partner](https://www.oetiker.ch/en/).
