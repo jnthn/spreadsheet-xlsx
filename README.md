@@ -41,10 +41,11 @@ say $workbook.worksheets.name;
 
 # Get cell values (indexing is zero-based, done as a multi-dimensional array
 # indexing operation [row ; column].
-say .value with $workbook.worksheets[0;0];      # A1
-say .value with $workbook.worksheets[0;1];      # B1
-say .value with $workbook.worksheets[1;0];      # A2
-say .value with $workbook.worksheets[1;1];      # B2
+my $cells = $workbook.worksheets[0].cells;
+say .value with $cells[0;0];      # A1
+say .value with $cells[0;1];      # B1
+say .value with $cells[1;0];      # A2
+say .value with $cells[1;1];      # B2
 ```
 
 ### Creating new workbooks
