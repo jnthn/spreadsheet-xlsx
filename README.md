@@ -37,7 +37,7 @@ my $workbook = Spreadsheet::XLSX.load('accounts.xlsx');
 say "Workbook has {$workbook.worksheets.elems} sheets";
 
 # Get the name of a worksheet.
-say $workbook.worksheets.name;
+say $workbook.worksheets».name;
 
 # Get cell values (indexing is zero-based, done as a multi-dimensional array
 # indexing operation [row ; column].
@@ -53,8 +53,8 @@ say .value with $cells[1;1];      # B2
 ```raku
 # Create a new workbook and add some worksheets to it.
 my $workbook = Spreadsheet::XLSX.new;
-my $sheet-a = $workbook.create-worksheet('Ingredients')
-my $sheet-b = $workbook.create-worksheet('Matching Drinks')
+my $new-sheet-a = $workbook.create-worksheet('Ingredients');
+my $sheet-b = $workbook.create-worksheet('Matching Drinks');
 
 # Put some data into a worksheet and style it. This is how the model
 # actually works (useful if you want to add styles later)...
@@ -63,7 +63,7 @@ $new-sheet-a.cells[0;0].style.bold = True;
 $new-sheet-a.cells[0;1] = Spreadsheet::XLSX::Cell::Text.new(value => 'Quantity');
 $new-sheet-a.cells[0;1].style.bold = True;
 $new-sheet-a.cells[1;0] = Spreadsheet::XLSX::Cell::Text.new(value => 'Eggs');
-$new-sheet-a.cells[1;1] = Spreadsheet::XLSX::Cell::Number.new(value => '6');
+$new-sheet-a.cells[1;1] = Spreadsheet::XLSX::Cell::Number.new(value => 6);
 $new-sheet-a.cells[1;1].style.number-format = '#,###';
 
 # However, there is a convenience form too.
