@@ -28,7 +28,9 @@ for. That isn't so much, for now, but it will handle the most common needs:
 
 ### Reading existing workbooks
 
-```
+```raku
+use Spreadsheet::XLSX;
+
 # Read a workbook from an existing file (can pass IO::Path or a
 # Blob in the case it was uploaded).
 my $workbook = Spreadsheet::XLSX.load('accounts.xlsx');
@@ -51,26 +53,28 @@ say .value with $cells[1;1];      # B2
 ### Creating new workbooks
 
 ```raku
+use Spreadsheet::XLSX;
+
 # Create a new workbook and add some worksheets to it.
 my $workbook = Spreadsheet::XLSX.new;
-my $sheet-a = $workbook.create-worksheet('Ingredients')
-my $sheet-b = $workbook.create-worksheet('Matching Drinks')
+my $sheet-a = $workbook.create-worksheet('Ingredients');
+my $sheet-b = $workbook.create-worksheet('Matching Drinks');
 
 # Put some data into a worksheet and style it. This is how the model
-# actually works (useful if you want to add styles later)...
-$new-sheet-a.cells[0;0] = Spreadsheet::XLSX::Cell::Text.new(value => 'Ingredient');
-$new-sheet-a.cells[0;0].style.bold = True;
-$new-sheet-a.cells[0;1] = Spreadsheet::XLSX::Cell::Text.new(value => 'Quantity');
-$new-sheet-a.cells[0;1].style.bold = True;
-$new-sheet-a.cells[1;0] = Spreadsheet::XLSX::Cell::Text.new(value => 'Eggs');
-$new-sheet-a.cells[1;1] = Spreadsheet::XLSX::Cell::Number.new(value => '6');
-$new-sheet-a.cells[1;1].style.number-format = '#,###';
+# actually works (useful if you want to add styles later).
+$sheet-a.cells[0;0] = Spreadsheet::XLSX::Cell::Text.new(value => 'Ingredient');
+$sheet-a.cells[0;0].style.bold = True;
+$sheet-a.cells[0;1] = Spreadsheet::XLSX::Cell::Text.new(value => 'Quantity');
+$sheet-a.cells[0;1].style.bold = True;
+$sheet-a.cells[1;0] = Spreadsheet::XLSX::Cell::Text.new(value => 'Eggs');
+$sheet-a.cells[1;1] = Spreadsheet::XLSX::Cell::Number.new(value => 6);
+$sheet-a.cells[1;1].style.number-format = '#,###';
 
 # However, there is a convenience form too.
-$new-sheet-a.set(0, 0, 'Ingredient', :bold);
-$new-sheet-a.set(0, 1, 'Quantity', :bold);
-$new-sheet-a.set(1, 0, 'Eggs');
-$new-sheet-a.set(1, 1, 6, :number-format('#,###'));
+$sheet-a.set(0, 0, 'Ingredient', :bold);
+$sheet-a.set(0, 1, 'Quantity', :bold);
+$sheet-a.set(1, 0, 'Eggs');
+$sheet-a.set(1, 1, 6, :number-format('#,###'));
 
 # Save it to a file (string or IO::Path name).
 $workbook.save("foo.xlsx");
