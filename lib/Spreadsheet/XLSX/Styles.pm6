@@ -265,7 +265,7 @@ class Spreadsheet::XLSX::Styles {
     has Format @.cell-formats;
 
     #| Load the styles information from XML.
-    method from-xml(--> Spreadsheet::XLSX::Styles) {
+    method from-xml(Str $xml --> Spreadsheet::XLSX::Styles) {
         # TODO implement this
         Spreadsheet::XLSX::Styles.bless
     }

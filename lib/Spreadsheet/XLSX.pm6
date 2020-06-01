@@ -160,6 +160,16 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
         return $buffer;
     }
 
+    #| Saves the Excel workbook to the file path identified by the given string.
+    multi method save(Str $file --> Nil) {
+        self.save($file.IO)
+    }
+
+    #| Save an Excel workbook to the specified file.
+    multi method save(IO::Path $file --> Nil) {
+        $file.spurt(self.to-blob)
+    }
+
     #| Synchronizes all changes to the internal representation of the
     #| archive. This is performed automatically before saving, and there
     #| is no need to explicitly perform it.

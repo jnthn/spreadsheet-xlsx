@@ -284,6 +284,27 @@ class Spreadsheet::XLSX::Worksheet {
         }
     }
 
+    #| Set the specified row and column to a text cell with the specified
+    #| value, and apply the specified styles also. Any existing styles will
+    #| be cleared.
+    multi method set(Int $row, Int $col, Str $value, *%styles --> Spreadsheet::XLSX::Cell) {
+        self!set($row, $col, Spreadsheet::XLSX::Cell::Text.new(:$value), %styles)
+    }
+
+    #| Set the specified row and column to a number cell with the specified
+    #| value, and apply the specified styles also. Any existing styles will
+    #| be cleared.
+    multi method set(Int $row, Int $col, Real $value, *%styles --> Spreadsheet::XLSX::Cell) {
+        self!set($row, $col, Spreadsheet::XLSX::Cell::Number.new(:$value), %styles)
+    }
+
+    method !set(Int $row, Int $col, Spreadsheet::XLSX::Cell $cell, %styles) {
+        for %styles.kv -> $method, $value {
+            $cell.style."$method"() = $value;
+        }
+        self.cells.ASSIGN-POS($row, $col, $cell);
+    }
+
     #| Get column properties for the worksheet. Each column that has some
     #| associated properties will have an instance.
     method columns(--> Array) {

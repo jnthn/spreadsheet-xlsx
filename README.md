@@ -41,10 +41,11 @@ say $workbook.worksheets.name;
 
 # Get cell values (indexing is zero-based, done as a multi-dimensional array
 # indexing operation [row ; column].
-say .value with $workbook.worksheets[0;0];      # A1
-say .value with $workbook.worksheets[0;1];      # B1
-say .value with $workbook.worksheets[1;0];      # A2
-say .value with $workbook.worksheets[1;1];      # B2
+my $cells = $workbook.worksheets[0].cells;
+say .value with $cells[0;0];      # A1
+say .value with $cells[0;1];      # B1
+say .value with $cells[1;0];      # A2
+say .value with $cells[1;1];      # B2
 ```
 
 ### Creating new workbooks
@@ -55,14 +56,27 @@ my $workbook = Spreadsheet::XLSX.new;
 my $sheet-a = $workbook.create-worksheet('Ingredients')
 my $sheet-b = $workbook.create-worksheet('Matching Drinks')
 
-# Put some data into a worksheet and style it.
+# Put some data into a worksheet and style it. This is how the model
+# actually works (useful if you want to add styles later)...
 $new-sheet-a.cells[0;0] = Spreadsheet::XLSX::Cell::Text.new(value => 'Ingredient');
 $new-sheet-a.cells[0;0].style.bold = True;
 $new-sheet-a.cells[0;1] = Spreadsheet::XLSX::Cell::Text.new(value => 'Quantity');
 $new-sheet-a.cells[0;1].style.bold = True;
+$new-sheet-a.cells[1;0] = Spreadsheet::XLSX::Cell::Text.new(value => 'Eggs');
+$new-sheet-a.cells[1;1] = Spreadsheet::XLSX::Cell::Number.new(value => '6');
+$new-sheet-a.cells[1;1].style.number-format = '#,###';
 
-# Save it.
-spurt "foo.xlsx", $workbook.to-blob();
+# However, there is a convenience form too.
+$new-sheet-a.set(0, 0, 'Ingredient', :bold);
+$new-sheet-a.set(0, 1, 'Quantity', :bold);
+$new-sheet-a.set(1, 0, 'Eggs');
+$new-sheet-a.set(1, 1, 6, :number-format('#,###'));
+
+# Save it to a file (string or IO::Path name).
+$workbook.save("foo.xlsx");
+
+# Or get it as a blob, e.g. for a HTTP response.
+my $blob = $workbook.to-blob();
 ```
 
 ## Credits
