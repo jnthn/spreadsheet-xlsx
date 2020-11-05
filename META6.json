@@ -1,7 +1,7 @@
 {
   "name": "Spreadsheet::XLSX",
   "description": "Work with Excel (XLSX) spreadsheets.",
-  "version": "0.1",
+  "version": "0.2",
   "perl": "6.*",
   "auth": "Edument",
   "depends": [
