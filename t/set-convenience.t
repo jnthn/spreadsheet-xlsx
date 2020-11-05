@@ -16,7 +16,7 @@ given $sheet.cells[0;0] {
 $sheet.set(0, 1, 42, :number-format('#.#'));
 given $sheet.cells[0;1] {
     isa-ok $_, Spreadsheet::XLSX::Cell::Number,
-            'Convenience set form creates a number cell with a string';
+            'Convenience set form creates a number cell with an Int';
     is-deeply .value, 42, 'Correct cell value';
     nok .style.bold, 'No bold style set';
     is .style.number-format, '#.#', 'Number format is set';
@@ -24,5 +24,14 @@ given $sheet.cells[0;1] {
 
 dies-ok { $sheet.set(0, 2, 42, :no-such-style) },
         'Trying to set a style that does not exist dies';
+
+$sheet.set(0, 2, val('4.2'), :number-format('#.#'));
+given $sheet.cells[0;2] {
+    isa-ok $_, Spreadsheet::XLSX::Cell::Number,
+            'Convenience set form creates a number cell with a RatStr';
+    is-deeply .value, 4.2, 'Correct cell value';
+    nok .style.bold, 'No bold style set';
+    is .style.number-format, '#.#', 'Number format is set';
+}
 
 done-testing;

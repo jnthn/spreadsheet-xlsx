@@ -294,8 +294,8 @@ class Spreadsheet::XLSX::Worksheet {
     #| Set the specified row and column to a number cell with the specified
     #| value, and apply the specified styles also. Any existing styles will
     #| be cleared.
-    multi method set(Int $row, Int $col, Real $value, *%styles --> Spreadsheet::XLSX::Cell) {
-        self!set($row, $col, Spreadsheet::XLSX::Cell::Number.new(:$value), %styles)
+    multi method set(Int $row, Int $col, Real $value, *%styles --> Spreadsheet::XLSX::Cell) is default {
+        self!set($row, $col, Spreadsheet::XLSX::Cell::Number.new(:value(+$value)), %styles)
     }
 
     method !set(Int $row, Int $col, Spreadsheet::XLSX::Cell $cell, %styles) {
