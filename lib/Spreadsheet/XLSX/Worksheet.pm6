@@ -379,7 +379,8 @@ class Spreadsheet::XLSX::Worksheet {
 
         # Update the sheet data.
         my @node-list := $!backing.documentElement.childNodes.list;
-        with @node-list.first(*.name eq 'sheetData') -> LibXML::Element $sheetData {
+        my LibXML::Element $sheetData = @node-list.first(*.name eq 'sheetData');
+        with $sheetData {
             .sync-sheet-data-xml($sheetData, $!root.styles) with $!cells;
         }
         else {
@@ -394,7 +395,7 @@ class Spreadsheet::XLSX::Worksheet {
                 # We have columns info to save.
                 without $cols-xml {
                     $cols-xml = $!backing.createElement('cols');
-                    $!backing.documentElement.add($cols-xml);
+                    $!backing.documentElement.insertBefore($cols-xml, $sheetData);
                 }
                 self!sync-columns-into($cols-xml);
             }
