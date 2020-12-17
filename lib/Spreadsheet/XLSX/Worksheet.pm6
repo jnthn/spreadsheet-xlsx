@@ -183,8 +183,12 @@ class Spreadsheet::XLSX::Worksheet {
         #| Turns 0-based array indices for row and column into the cell
         #| name.
         method !cell-name(Int $row, Int $col) {
+            ($col < 26 ?? chr(ord('A') + $col) !! self!big-col-name($col)) ~ ($row + 1)
+        }
+
+        method !big-col-name(Int $col) {
             my constant $offset = 'A'.ord - '0'.ord;
-            $col.base(26).comb.map({ chr .ord + $offset }).join ~ ($row + 1)
+            $col.base(26).comb.map({ chr .ord + $offset }).join
         }
     }
 
