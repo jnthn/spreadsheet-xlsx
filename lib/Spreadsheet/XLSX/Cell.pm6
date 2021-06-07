@@ -58,7 +58,7 @@ class Spreadsheet::XLSX::Cell::Text does Spreadsheet::XLSX::Cell {
         $col.removeChildNodes();
         my LibXML::Element $is = $document.createElement('is');
         my LibXML::Element $t = $document.createElement('t');
-        $t.nodeValue = $!value;
+        $t.appendText($!value);
         $is.add($t);
         $col.add($is);
     }

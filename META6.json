@@ -6,7 +6,7 @@
   "auth": "Edument",
   "depends": [
     "Libarchive",
-    "LibXML:ver<0.5.10+>"
+    "LibXML:ver<0.6.0+>"
   ],
   "build-depends": [],
   "test-depends": [],
