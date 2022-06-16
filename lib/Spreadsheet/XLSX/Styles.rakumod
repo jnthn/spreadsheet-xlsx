@@ -313,7 +313,7 @@ class Spreadsheet::XLSX::Styles {
     }
 
     #| Persist the styles information to XML.
-    method to-xml(--> Str) {
+    method to-xml(--> Blob) {
         # Create root element.
         my LibXML::Document $doc .= new: :version('1.0'), :enc('UTF-8');
         $doc.setStandalone(LibXML::Document::XmlStandaloneNo);
@@ -330,7 +330,7 @@ class Spreadsheet::XLSX::Styles {
         self!add-part($doc, $root, 'cellStyleXfs', @!formatting-records);
         self!add-part($doc, $root, 'cellXfs', @!cell-formats);
         
-        return $doc.Str;
+        return $doc.Blob;
     }
 
     method !add-part(LibXML::Document $doc, LibXML::Element $root, Str $tag-name, @items) {

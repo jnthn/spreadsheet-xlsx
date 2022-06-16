@@ -144,7 +144,7 @@ class Spreadsheet::XLSX::Workbook {
     #| archive, including all new or modified worksheets.
     method sync-to-archive(--> Nil) {
         # Save the XML of this workbook.
-        $!root.set-file-in-archive($!relationships.for, self.to-xml().encode('utf-8'));
+        $!root.set-file-in-archive($!relationships.for, self.to-xml());
 
         # And then the worksheets (which will sync the styles used by
         # cells also).
@@ -165,14 +165,14 @@ class Spreadsheet::XLSX::Workbook {
                     content-type => 'application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml';
             $target
         }
-        $!root.set-file-in-archive($styles-path, $!styles.to-xml().encode('utf-8'));
+        $!root.set-file-in-archive($styles-path, $!styles.to-xml());
     }
 
     #| Form an XML representation of the workbook. If the workbook was loaded
     #| from an existing XML document, then it will just change the parts of
     #| that backing storage that it understands, and aim to leave the rest of
     #| it intact.
-    method to-xml(--> Str) {
+    method to-xml(--> Blob) {
         # Create baseline backing storage, if there isn't any. Otherwise,
         # just locate the sheets part.
         my LibXML::Element $sheets = do with $!backing {
@@ -209,6 +209,6 @@ class Spreadsheet::XLSX::Workbook {
             $sheets.add($sheet);
         }
 
-        return $!backing.Str;
+        return $!backing.Blob;
     }
 }

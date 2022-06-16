@@ -83,8 +83,8 @@ class Spreadsheet::XLSX::ContentTypes {
         return $override;
     }
 
-    #| Turn the content types into an XML string.
-    method to-xml(--> Str) {
+    #| Turn the content types into an XML blob.
+    method to-xml(--> Blob) {
         # Create root element.
         my LibXML::Document $doc .= new: :version('1.0'), :enc('UTF-8');
         $doc.setStandalone(LibXML::Document::XmlStandaloneNo);
@@ -109,6 +109,6 @@ class Spreadsheet::XLSX::ContentTypes {
             $root.add($element);
         }
 
-        return $doc.Str;
+        return $doc.Blob;
     }
 }

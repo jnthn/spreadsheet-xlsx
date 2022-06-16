@@ -362,11 +362,11 @@ class Spreadsheet::XLSX::Worksheet {
         return if $!backing-path.defined && !$!backing.defined;
 
         # Otherwise, update the XML.
-        $!root.set-file-in-archive($.archive-path, self.to-xml().encode('utf-8'));
+        $!root.set-file-in-archive($.archive-path, self.to-xml());
     }
 
     #| Produce XML for the worksheet.
-    method to-xml(--> Str) {
+    method to-xml(--> Blob) {
         # Create a stub worksheet document if we weren't loaded from
         # one.
         without $!backing {
@@ -412,7 +412,7 @@ class Spreadsheet::XLSX::Worksheet {
             }
         }
 
-        return $!backing.Str;
+        return $!backing.Blob;
     }
 
     method !sync-columns-into(LibXML::Element $cols) {

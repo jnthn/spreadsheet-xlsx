@@ -110,8 +110,8 @@ class Spreadsheet::XLSX::Relationships {
         return $relationship;
     }
 
-    #| Turn the relationships into an XML string.
-    method to-xml(--> Str) {
+    #| Turn the relationships into an XML blob.
+    method to-xml(--> Blob) {
         # Create root element.
         my LibXML::Document $doc .= new: :version('1.0'), :enc('UTF-8');
         $doc.setStandalone(LibXML::Document::XmlStandaloneNo);
@@ -133,6 +133,6 @@ class Spreadsheet::XLSX::Relationships {
             $root.add($element);
         }
 
-        return $doc.Str;
+        return $doc.Blob;
     }
 }

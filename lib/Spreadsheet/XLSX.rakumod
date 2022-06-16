@@ -181,12 +181,12 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
         # them, and so potentially modified them. Untouched ones won't need to
         # be updated.
         for %!relationships.values -> Spreadsheet::XLSX::Relationships $rels {
-            $!archive{self!rel-path($rels.for)} = $rels.to-xml().encode('utf-8');
+            $!archive{self!rel-path($rels.for)} = $rels.to-xml();
         }
 
         # Sync the content types; even if we didn't change these, they
         # need to be saved.
         $!archive //= {};
-        $!archive{'[Content_Types].xml'} = $!content-types.to-xml().encode('utf-8');
+        $!archive{'[Content_Types].xml'} = $!content-types.to-xml();
     }
 }
