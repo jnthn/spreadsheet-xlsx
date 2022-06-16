@@ -1,9 +1,9 @@
 {
   "name": "Spreadsheet::XLSX",
   "description": "Work with Excel (XLSX) spreadsheets.",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "perl": "6.*",
-  "auth": "Edument",
+  "auth": "zef:jnthn",
   "depends": [
     "Libarchive",
     "LibXML:ver<0.6.0+>"
