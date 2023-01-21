@@ -64,9 +64,21 @@ class Spreadsheet::XLSX::Cell::Text does Spreadsheet::XLSX::Cell {
     }
 }
 
+class Spreadsheet::XLSX::Cell::Empty does Spreadsheet::XLSX::Cell {
+    method value { Nil }
+
+    multi method Str { '' }
+
+    method sync-value-xml(LibXML::Document $, LibXML::Element $col --> Nil) {
+        $col.removeChildNodes();
+    }
+}
+
 #| Takes an XML node from shared strings and produces the correct kind of
 #| Cell object from it.
 sub cell-from-xml(LibXML::Element $element) is export {
+    return Spreadsheet::XLSX::Cell::Empty.new unless $element.hasChildNodes;
+
     my LibXML::Attr $type-node = $element.getAttributeNode('t');
     given $type-node ?? $type-node.string-value !! '' {
         when '' {
