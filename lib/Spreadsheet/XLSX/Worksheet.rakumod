@@ -53,6 +53,11 @@ class Spreadsheet::XLSX::Worksheet {
             @row[$col] = $value
         }
 
+        method max-row {
+            self!load-backing-rows;
+            @!backing-rows.elems - 1
+        }
+
         method !maybe-load-from-backing(Int $row, Int $col) {
             with self!lookup-backing-row($row) -> LibXML::Element $backing-row {
                 my ($from, $to) = get-attribute($backing-row, "spans").split(':');
@@ -66,7 +71,7 @@ class Spreadsheet::XLSX::Worksheet {
             return Spreadsheet::XLSX::Cell;
         }
 
-        method !lookup-backing-row($row) {
+        method !load-backing-rows {
             with $!backing {
                 unless @!backing-rows {
                     $!backing.childNodes.map: -> LibXML::Element $backing-row {
@@ -77,6 +82,10 @@ class Spreadsheet::XLSX::Worksheet {
                     }
                 }
             }
+        }
+
+        method !lookup-backing-row($row) {
+            self!load-backing-rows;
             @!backing-rows[$row]
         }
 
