@@ -1,4 +1,5 @@
 use LibXML::Document;
+use AttrX::Mooish;
 use Spreadsheet::XLSX::Cell;
 use Spreadsheet::XLSX::Root;
 
@@ -32,7 +33,7 @@ class Spreadsheet::XLSX::Worksheet {
 
         #| Quick lookup of rows, since the underying representation may be
         #| sparse.
-        has LibXML::Element @!backing-rows;
+        has LibXML::Element @!backing-rows is mooish(:lazy);
 
         #| Cached cells (those we have created if we're making a new sheet,
         #| or those we have read and/or modified if we've based on a document
@@ -41,11 +42,22 @@ class Spreadsheet::XLSX::Worksheet {
 
         submethod TWEAK(LibXML::Element :$!backing --> Nil) {}
 
+        method !build-backing-rows {
+            return Empty without $!backing;
+            my LibXML::Element @brows;
+            $!backing.childNodes.map: -> LibXML::Element $backing-row {
+                if $backing-row.nodeName eq 'row' {
+                    my $row-str = get-attribute($backing-row, 'r');
+                    @brows[$row-str.Int - 1] = $backing-row;
+                }
+            }
+            @brows
+        }
+
         multi method AT-POS(Int $row, Int $col) is raw {
             my @row := (@!rows[$row] //= Array[Spreadsheet::XLSX::Cell].new);
             my $cell := @row[$col];
-            $cell //= self!maybe-load-from-backing($row, $col);
-            $cell
+            $cell //= self!maybe-load-from-backing($row, $col)
         }
 
         multi method ASSIGN-POS(Int $row, Int $col, Spreadsheet::XLSX::Cell $value) {
@@ -53,8 +65,10 @@ class Spreadsheet::XLSX::Worksheet {
             @row[$col] = $value
         }
 
+        method max-row { @!backing-rows.elems - 1 }
+
         method !maybe-load-from-backing(Int $row, Int $col) {
-            with self!lookup-backing-row($row) -> LibXML::Element $backing-row {
+            with @!backing-rows[$row] -> LibXML::Element $backing-row {
                 my ($from, $to) = get-attribute($backing-row, "spans").split(':');
                 if $from <= $col + 1 <= $to {
                     my LibXML::Element $doc-col = $backing-row.childNodes[$col - ($from - 1)];
@@ -64,20 +78,6 @@ class Spreadsheet::XLSX::Worksheet {
                 }
             }
             return Spreadsheet::XLSX::Cell;
-        }
-
-        method !lookup-backing-row($row) {
-            with $!backing {
-                unless @!backing-rows {
-                    $!backing.childNodes.map: -> LibXML::Element $backing-row {
-                        if $backing-row.nodeName eq 'row' {
-                            my $row-str = get-attribute($backing-row, 'r');
-                            @!backing-rows[$row-str.Int - 1] = $backing-row;
-                        }
-                    }
-                }
-            }
-            @!backing-rows[$row]
         }
 
         method !load-cell(LibXML::Element $cell --> Spreadsheet::XLSX::Cell) {

@@ -5,6 +5,7 @@
   "perl": "6.*",
   "auth": "zef:jnthn",
   "depends": [
+    "AttrX::Mooish:auth<zef:vrurg>:ver<1.0.0+>",
     "Libarchive",
     "LibXML:ver<0.6.0+>"
   ],
