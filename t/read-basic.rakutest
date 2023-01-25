@@ -1,6 +1,8 @@
 use Spreadsheet::XLSX;
 use Test;
 
+plan 58;
+
 given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
     isa-ok $_, Spreadsheet::XLSX, 'Loaded gave a Spreadsheet::XLSX instance';
 
@@ -48,6 +50,15 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
             is .[0].target, 'xl/workbook.xml',
                 'Correct target in type result';
         }
+    }
+
+    given .core-properties {
+        isa-ok $_, Spreadsheet::XLSX::DocProps::Core;
+        is-deeply .keys.sort, <created creator lastModifiedBy modified>, "all set core properties in the document";
+        is .<creator>, 'jnthn', "creator core property";
+        is .<lastModifiedBy>, 'jnthn', "last modified by core property";
+        is .<created>, DateTime.new("2020-05-12T09:47:45Z"), "created date core property";
+        is .<modified>, DateTime.new("2020-05-12T09:52:28Z"), "modified date core property";
     }
 
     given .workbook {

@@ -15,6 +15,7 @@
     "Spreadsheet::XLSX::Cell": "lib/Spreadsheet/XLSX/Cell.rakumod",
     "Spreadsheet::XLSX::CellStyle": "lib/Spreadsheet/XLSX/CellStyle.rakumod",
     "Spreadsheet::XLSX::ContentTypes": "lib/Spreadsheet/XLSX/ContentTypes.rakumod",
+    "Spreadsheet::XLSX::DocProps::Core": "lib/Spreadsheet/XLSX/DocProps/Core.rakumod",
     "Spreadsheet::XLSX::Exceptions": "lib/Spreadsheet/XLSX/Exceptions.rakumod",
     "Spreadsheet::XLSX::Relationships": "lib/Spreadsheet/XLSX/Relationships.rakumod",
     "Spreadsheet::XLSX::Root": "lib/Spreadsheet/XLSX/Root.rakumod",

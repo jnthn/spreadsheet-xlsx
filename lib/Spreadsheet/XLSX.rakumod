@@ -1,5 +1,6 @@
 use Libarchive::Simple;
 use Spreadsheet::XLSX::ContentTypes;
+use Spreadsheet::XLSX::DocProps::Core;
 use Spreadsheet::XLSX::Exceptions;
 use Spreadsheet::XLSX::Relationships;
 use Spreadsheet::XLSX::Root;
@@ -17,9 +18,16 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
     #| in here.)
     has Spreadsheet::XLSX::Relationships %!relationships;
 
+    has Spreadsheet::XLSX::Relationships $!root-relationships;
+
     #| The workbook itself.
     has Spreadsheet::XLSX::Workbook $.workbook
             handles <create-worksheet worksheets shared-strings styles>;
+
+    #| Document Core Properties
+    has Spreadsheet::XLSX::DocProps::Core $!core-props;
+
+    my $core-prop-type = 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties';
 
     #| Load an Excel workbook from the file path identified by the given string.
     multi method load(Str $file --> Spreadsheet::XLSX) {
@@ -55,10 +63,11 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
             }
 
             # Locate the root relationships file, and using it, the workbook root.
-            with self.find-relationships('') -> Spreadsheet::XLSX::Relationships $top-rel {
-                with $top-rel
+            with $!root-relationships = self.find-relationships('') {
+                with $!root-relationships
                         .find-by-type('http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument')
-                        .first {
+                        .first
+                {
                     self!load-workbook-xml(.target);
                 }
                 else {
@@ -79,8 +88,8 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
             # found.
             my constant $workbook-path = 'xl/workbook.xml';
 
-            my $root-relationships = self.find-relationships('', :create);
-            $root-relationships.add:
+            $!root-relationships = self.find-relationships('', :create);
+            $!root-relationships.add:
                     type => 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument',
                     target => $workbook-path;
 
@@ -92,16 +101,30 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
         }
     }
 
+    method !archive-file(Str:D $file, Str:D $what) {
+        $!archive{$file}
+            // die X::Spreadsheet::XLSX::Format.new: message => "$what file '$file' not found in archive"
+    }
+
     #| Loads the workbook XML file from the archive.
     method !load-workbook-xml(Str $workbook-file) {
-        with $!archive{$workbook-file} {
-            $!workbook = Spreadsheet::XLSX::Workbook.from-xml:
-                    .decode('utf-8'), :root(self),
-                    relationships => self.find-relationships($workbook-file);
+        $!workbook = Spreadsheet::XLSX::Workbook.from-xml:
+            self!archive-file($workbook-file, "Workbook").decode('utf-8'),
+            :root(self), relationships => self.find-relationships($workbook-file);
+    }
+
+    method !core-props-rel {
+        $!root-relationships.find-by-type($core-prop-type).head
+    }
+
+    method !load-core-props {
+        with self!core-props-rel {
+            Spreadsheet::XLSX::DocProps::Core.from-xml:
+                self!archive-file(.target, "Core properties").decode('utf-8')
         }
         else {
-            die X::Spreadsheet::XLSX::Format.new:
-                    message => "Workbook file '$workbook-file' not found in archive";
+            $!root-relationships.add: :target('docProps/core.xml'), :type($core-prop-type);
+            Spreadsheet::XLSX::DocProps::Core.new
         }
     }
 
@@ -178,6 +201,11 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
         # Sync the workbook, which will in turn handle sync of anything it owns.
         $!workbook.sync-to-archive();
 
+        # Store core properties if were changed in any way.
+        with $!core-props {
+            $!archive{self!core-props-rel.target} = .to-xml;
+        }
+
         # Sync any relationships objects we have; we only have these if we read
         # them, and so potentially modified them. Untouched ones won't need to
         # be updated.
@@ -189,6 +217,10 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
         # need to be saved.
         $!archive //= {};
         $!archive{'[Content_Types].xml'} = $!content-types.to-xml();
+    }
+
+    method core-properties {
+        $!core-props //= self!load-core-props;
     }
 }
 

@@ -1,11 +1,42 @@
 use Spreadsheet::XLSX;
+use Spreadsheet::XLSX::Exceptions;
 use Test;
 
-plan 53;
+plan 68;
 
 my Spreadsheet::XLSX $sheet;
 lives-ok { $sheet = Spreadsheet::XLSX.new },
         'Can create a new SpreadSheet::XLSX instance';
+
+my $created-at = DateTime.now;
+
+given $sheet.core-properties {
+    isa-ok $_, Spreadsheet::XLSX::DocProps::Core;
+    is .keys.elems, 0, "new spreadhseet doesn't have any core properties";
+
+    lives-ok { .<creator> = "robot" }, "assginment to a simple string property";
+    lives-ok { .<created> = $created-at }, "assginment to a date property";
+    .<description> = "foo & bar";
+
+    nok (.<keywords>:exists), "no keywords in a new document";
+    .<keywords> = <first second>;
+    ok (.<keywords>:exists), "assignment to keywords property vivifies it";
+    is-deeply .<keywords>.list, <first second>, "assigned keywords are in there";
+    lives-ok { .<keywords>.set(<перший другий>, :lang<uk-UA>) }, "setting keywords in different language";
+    is-deeply .<keywords>.pairs.sort,
+              (en-US => <first second>, uk-UA => <перший другий>),
+              "keywords are set by language";
+
+    throws-like
+        { .<foo> },
+        X::Spreadsheet::XLSX::NoSuchProperty,
+        "reading from an unknown property throws";
+
+    throws-like
+        { .<foo> = "doesn't matter" },
+        X::Spreadsheet::XLSX::NoSuchProperty,
+        "assignment to an unknown property throws";
+}
 
 given $sheet.content-types {
     isa-ok $_, Spreadsheet::XLSX::ContentTypes;
@@ -150,6 +181,15 @@ given $reloaded.worksheets {
         is .custom-width, True, 'Custom width column property saved (3)';
         is .width, 28.5, 'Custom width saved (3)';
     }
+}
+
+given $reloaded.core-properties {
+    is .<creator>, "robot", "simple core property deserialized";
+    is .<description>, "foo & bar", "& in a core property deserialized";
+    is .<created>, $created-at, "date core property deserialized";
+    is-deeply .<keywords>.pairs.sort,
+              (en-US => <first second>, uk-UA => <перший другий>),
+              "keywords structure is correctly deserialized";
 }
 
 done-testing;
