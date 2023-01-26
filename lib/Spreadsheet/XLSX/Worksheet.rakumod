@@ -75,7 +75,7 @@ class Spreadsheet::XLSX::Worksheet {
             with $!backing {
                 unless @!backing-rows {
                     $!backing.childNodes.map: -> LibXML::Element $backing-row {
-                        if $backing-row.nodeName eq 'row' {
+                        if $backing-row.nodeName eq 'row' && $backing-row.hasAttribute('spans') {
                             my $row-str = get-attribute($backing-row, 'r');
                             @!backing-rows[$row-str.Int - 1] = $backing-row;
                         }
