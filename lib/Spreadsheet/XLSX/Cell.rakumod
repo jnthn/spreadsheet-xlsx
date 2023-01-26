@@ -48,7 +48,7 @@ class Spreadsheet::XLSX::Cell::Number does Spreadsheet::XLSX::Cell {
     }
 }
 
-#| A simple text cell.
+#| An inline text cell.
 class Spreadsheet::XLSX::Cell::Text does Spreadsheet::XLSX::Cell {
     #| The textual value of the cell.
     has Str $.value is required;
@@ -60,22 +60,39 @@ class Spreadsheet::XLSX::Cell::Text does Spreadsheet::XLSX::Cell {
 
     #| Sync the value to XML.
     method sync-value-xml(LibXML::Document $document, LibXML::Element $col --> Nil) {
-        # Make sure the type is inlineStr.
-        with $col.getAttributeNode('t') {
-            .setValue('inlineStr')
+        if $!formula {
+            # Make sure the type is str.
+            with $col.getAttributeNode('t') {
+                .setValue('str')
+            }
+            else {
+                $col.add($document.createAttribute('t', 'str'));
+            }
+
+            # Set the content (<v>cached value</v>).
+            $col.removeChildNodes();
+            my LibXML::Element $v = $document.createElement('v');
+            $v.nodeValue = $!value;
+            $col.add($v);
+            self.maybe-sync-formula-xml($document, $col);
         }
         else {
-            $col.add($document.createAttribute('t', 'inlineStr'));
-        }
+            # Make sure the type is inlineStr.
+            with $col.getAttributeNode('t') {
+                .setValue('inlineStr')
+            }
+            else {
+                $col.add($document.createAttribute('t', 'inlineStr'));
+            }
 
-        # Set the content (<is><t>content</t></is>).
-        $col.removeChildNodes();
-        my LibXML::Element $is = $document.createElement('is');
-        my LibXML::Element $t = $document.createElement('t');
-        $t.appendText($!value);
-        $is.add($t);
-        $col.add($is);
-        self.maybe-sync-formula-xml($document, $col);
+            # Set the content (<is><t>content</t></is>).
+            $col.removeChildNodes();
+            my LibXML::Element $is = $document.createElement('is');
+            my LibXML::Element $t = $document.createElement('t');
+            $t.appendText($!value);
+            $is.add($t);
+            $col.add($is);
+        }
     }
 }
 
@@ -118,6 +135,15 @@ sub cell-from-xml(LibXML::Element $element) is export {
                 die X::NYI.new(feature => "Node of type $content-node.nodeName() in inline string");
             }
             Spreadsheet::XLSX::Cell::Text.new(value => $content-node.string-value, :$formula);
+        }
+        when 'str' {
+            my $v-node = $element.childNodes.first: *.name eq 'v';
+            without $v-node {
+                die X::Spreadsheet::XLSX::Format.new:
+                        message => 'str cell missing v tag';
+            }
+            Spreadsheet::XLSX::Cell::Text.new(value => $v-node.string-value,
+                                                :$row, $column, :$formula);
         }
         default {
             die X::NYI.new(feature => "Excel cells of type '$_'");
