@@ -30,6 +30,16 @@ class Spreadsheet::XLSX::SharedStrings does Positional {
                 when 't' {
                     $element.string-value
                 }
+                when 'r' {
+                    # TODO: Deep RichText handling.
+                    my $text;
+                    for $element.childNodes -> $elem {
+                        if $elem.nodeName eq 't' {
+                            $text ~= $elem.string-value;
+                        }
+                    }
+                    $text
+                }
                 default {
                     die X::NYI.new(feature => "Excel shared cells of type '$_'");
                 }
