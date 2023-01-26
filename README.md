@@ -39,7 +39,7 @@ my $workbook = Spreadsheet::XLSX.load('accounts.xlsx');
 say "Workbook has {$workbook.worksheets.elems} sheets";
 
 # Get the name of a worksheet.
-say $workbook.worksheets.name;
+say $workbook.worksheets[0].name;
 
 # Get cell values (indexing is zero-based, done as a multi-dimensional array
 # indexing operation [row ; column].
