@@ -7,8 +7,21 @@ role Spreadsheet::XLSX::Cell {
     #| Cell styling information.
     has Spreadsheet::XLSX::CellStyle $.style .= new;
 
+    #| Cell formula.
+    has Str $.formula;
+
     #| Sync the value to XML.
     method sync-value-xml(LibXML::Document $document, LibXML::Element $col --> Nil) { ... }
+
+    #| Sync the formula to XML.
+    #| Expects the target node to not contain an "f" element.
+    method maybe-sync-formula-xml(LibXML::Document $document, LibXML::Element $col --> Nil) {
+        with $!formula {
+            my LibXML::Element $f = $document.createElement('f');
+            $f.appendText($!formula);
+            $col.add($f);
+        }
+    }
 }
 
 #| A number cell.
@@ -31,6 +44,7 @@ class Spreadsheet::XLSX::Cell::Number does Spreadsheet::XLSX::Cell {
         my LibXML::Element $v = $document.createElement('v');
         $v.nodeValue = ~$!value;
         $col.add($v);
+        self.maybe-sync-formula-xml($document, $col);
     }
 }
 
@@ -61,6 +75,7 @@ class Spreadsheet::XLSX::Cell::Text does Spreadsheet::XLSX::Cell {
         $t.appendText($!value);
         $is.add($t);
         $col.add($is);
+        self.maybe-sync-formula-xml($document, $col);
     }
 }
 
@@ -80,15 +95,17 @@ sub cell-from-xml(LibXML::Element $element) is export {
     return Spreadsheet::XLSX::Cell::Empty.new unless $element.hasChildNodes;
 
     my LibXML::Attr $type-node = $element.getAttributeNode('t');
-    given $type-node ?? $type-node.string-value !! '' {
+    my $f-node = $element.childNodes.first: *.name eq 'f';
+    my Str $formula = $_.string-value with $f-node;
+    my $cell = do given $type-node ?? $type-node.string-value !! '' {
         when '' {
             # Empty means number.
-            my LibXML::Element $value-node = $element.first;
-            unless $value-node.nodeName eq 'v' {
+            my LibXML::Element $v-node = $element.childNodes.first: *.name eq 'v';
+            without $v-node {
                 die X::Spreadsheet::XLSX::Format.new:
                     message => 'Number cell node missing v value tag';
             }
-            Spreadsheet::XLSX::Cell::Number.new(value => +$value-node.string-value)
+            Spreadsheet::XLSX::Cell::Number.new(value => +$v-node.string-value, :$formula);
         }
         when 'inlineStr' {
             my LibXML::Element $is-node = $element.first;
@@ -100,7 +117,7 @@ sub cell-from-xml(LibXML::Element $element) is export {
             unless $content-node.nodeName eq 't' {
                 die X::NYI.new(feature => "Node of type $content-node.nodeName() in inline string");
             }
-            Spreadsheet::XLSX::Cell::Text.new(value => $content-node.string-value);
+            Spreadsheet::XLSX::Cell::Text.new(value => $content-node.string-value, :$formula);
         }
         default {
             die X::NYI.new(feature => "Excel cells of type '$_'");
