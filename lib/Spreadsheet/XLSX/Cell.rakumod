@@ -116,6 +116,46 @@ class Spreadsheet::XLSX::Cell::Bool does Spreadsheet::XLSX::Cell {
     }
 }
 
+enum Spreadsheet::XLSX::Cell::ErrorVal is export (
+    'NULL' => 1,
+    'DIV0',
+    'VALUE',
+    'REF',
+    'NAME',
+    'NUM',
+    'NA',
+    'GETTING_DATA',
+);
+
+#| An error cell.
+class Spreadsheet::XLSX::Cell::Error does Spreadsheet::XLSX::Cell {
+    #| The boolean value
+    has Spreadsheet::XLSX::Cell::ErrorVal $.value;
+
+    #| Get a string representing the cell's value.
+    multi method Str(::?CLASS:D:) {
+        given $!value {
+            when NULL { "#NULL!" }
+            when DIV0 { "#DIV/0!" }
+            when VALUE { "#VALUE!" }
+            when REF { "#REF!" }
+            when NAME { "#NAME?" }
+            when NUM { "#NUM!" }
+            when NA { "#N/A" }
+            when GETTING_DATA { "#GETTING_DATA" }
+        }
+    }
+
+    #| Sync the formula to XML.
+    method sync-value-xml(LibXML::Document $document, LibXML::Element $col --> Nil) {
+        $col.removeChildNodes();
+        my LibXML::Element $v = $document.createElement('v');
+        $v.nodeValue = ~$!value;
+        $col.add($v);
+        self.maybe-sync-formula-xml($document, $col);
+    }
+}
+
 class Spreadsheet::XLSX::Cell::Empty does Spreadsheet::XLSX::Cell {
     method value { Nil }
 
@@ -172,6 +212,27 @@ sub cell-from-xml(LibXML::Element $element) is export {
                         message => 'b cell missing v tag';
             }
             Spreadsheet::XLSX::Cell::Bool.new(value => +$v-node.string-value == 0 ?? False !! True, :$formula);
+        }
+        when 'e' {
+            my $v-node = $element.childNodes.first: *.name eq 'v';
+            without $v-node {
+                die X::Spreadsheet::XLSX::Format.new:
+                        message => 'b cell missing v tag';
+            }
+            my $err = do given $v-node.string-value {
+                when "#NULL!"        { NULL }
+                when "#DIV/0!"       { DIV0 }
+                when "#VALUE!"       { VALUE }
+                when "#REF!"         { REF }
+                when "#NAME?"        { NAME }
+                when "#NUM!"         { NUM }
+                when "#N/A"          { NA }
+                when "#GETTING_DATA" { GETTING_DATA }
+                default {
+                    die X::NYI.new(feature => "Excel cells of error type '$_'");
+                }
+            }
+            Spreadsheet::XLSX::Cell::Error.new(value => $err, :$formula);
         }
         default {
             die X::NYI.new(feature => "Excel cells of type '$_'");
