@@ -96,6 +96,26 @@ class Spreadsheet::XLSX::Cell::Text does Spreadsheet::XLSX::Cell {
     }
 }
 
+#| A boolean cell.
+class Spreadsheet::XLSX::Cell::Bool does Spreadsheet::XLSX::Cell {
+    #| The boolean value
+    has Bool $.value;
+
+    #| Get a string representing the cell's value.
+    multi method Str(::?CLASS:D:) {
+        $!value ?? "TRUE" !! "FALSE"
+    }
+
+    #| Sync the formula to XML.
+    method sync-value-xml(LibXML::Document $document, LibXML::Element $col --> Nil) {
+        $col.removeChildNodes();
+        my LibXML::Element $v = $document.createElement('v');
+        $v.nodeValue = $!value ?? 1 !! 0;
+        $col.add($v);
+        self.maybe-sync-formula-xml($document, $col);
+    }
+}
+
 class Spreadsheet::XLSX::Cell::Empty does Spreadsheet::XLSX::Cell {
     method value { Nil }
 
@@ -144,6 +164,14 @@ sub cell-from-xml(LibXML::Element $element) is export {
             }
             Spreadsheet::XLSX::Cell::Text.new(value => $v-node.string-value,
                                                 :$row, $column, :$formula);
+        }
+        when 'b' {
+            my $v-node = $element.childNodes.first: *.name eq 'v';
+            without $v-node {
+                die X::Spreadsheet::XLSX::Format.new:
+                        message => 'b cell missing v tag';
+            }
+            Spreadsheet::XLSX::Cell::Bool.new(value => +$v-node.string-value == 0 ?? False !! True, :$formula);
         }
         default {
             die X::NYI.new(feature => "Excel cells of type '$_'");
