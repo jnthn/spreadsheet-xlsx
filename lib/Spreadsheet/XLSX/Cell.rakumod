@@ -108,16 +108,8 @@ sub cell-from-xml(LibXML::Element $element) is export {
     }
 }
 
-#| Takes an XML node from shared strings and produces the correct kind of
-#| Cell object from it.
-sub shared-cell-from-xml(LibXML::Element $element) is export {
-    given $element.nodeName {
-        when 't' {
-            Spreadsheet::XLSX::Cell::Text.new(value => $element.string-value)
-        }
-        default {
-            die X::NYI.new(feature => "Excel shared cells of type '$_'");
-        }
-    }
+#| Takes a Str value from shared strings and produces a Cell object from it.
+sub shared-cell-from-xml(Str $val) is export {
+    Spreadsheet::XLSX::Cell::Text.new(value => $val)
 }
 
