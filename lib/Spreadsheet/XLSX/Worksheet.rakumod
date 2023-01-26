@@ -23,7 +23,75 @@ class Spreadsheet::XLSX::Worksheet {
     has Str $!proposed-path;
 
     #| Models the cells in the spreadsheet, providing access as a 2D array.
-    class Cells does Positional {
+    class Cells does Iterable does Positional {
+        class CellIterator { ... }
+        trusts CellIterator;
+        class CellIterator does Iterator {
+            has $!cells is required is built;
+            has @!existing-rows is required is built;
+            has $!row-index = -1;
+            has $!row-no = -1;
+            has $!col-no = -1;
+            has $!last-col = -1;
+            has $!empty = False;
+
+            submethod TWEAK {
+                $!empty = self!next-row;
+            }
+
+            method is-lazy { True }
+            method pull-one {
+                loop {
+                    if $!empty {
+                        return IterationEnd
+                    }
+                    else {
+                        my $val := self!pull-cell();
+                        if $val =:= IterationEnd {
+                            if self!next-row {
+                                return IterationEnd
+                            }
+                        }
+                        else {
+                            return $val;
+                        }
+                    }
+                }
+            }
+
+            method !next-row {
+                $!row-index++;
+                return True if $!row-index == @!existing-rows.elems;
+                $!row-no = @!existing-rows[$!row-index];
+                ($!col-no, $!last-col) = $!cells.column-span($!row-no);
+                $!col-no--;
+                return False;
+            }
+
+            method !pull-cell() {
+                loop {
+                    return IterationEnd if ++$!col-no >= $!last-col;
+                    if $!cells[$!row-no; $!col-no] -> $c {
+                        return $c;
+                    }
+                }
+            }
+        }
+
+        method iterator() {
+            self!load-backing-rows;
+            my @existing-rows = @!existing-rows;
+            @existing-rows .= sort;
+            my $last = -1;
+            @existing-rows.grep: {
+                my $r = $_ != $last;
+                $last = $_;
+                $r
+            }
+
+            CellIterator.new(:cells(self), :@existing-rows);
+        }
+
         #| The enclosing worksheet.
         has Spreadsheet::XLSX::Worksheet $.worksheet is required;
 
@@ -39,23 +107,43 @@ class Spreadsheet::XLSX::Worksheet {
         #| that we've read).
         has Array[Spreadsheet::XLSX::Cell] @!rows;
 
+        has @!existing-rows;
+
         submethod TWEAK(LibXML::Element :$!backing --> Nil) {}
 
         multi method AT-POS(Int $row, Int $col) is raw {
             my @row := (@!rows[$row] //= Array[Spreadsheet::XLSX::Cell].new);
             my $cell := @row[$col];
             $cell //= self!maybe-load-from-backing($row, $col);
+            @!existing-rows.push: $row;
             $cell
         }
 
         multi method ASSIGN-POS(Int $row, Int $col, Spreadsheet::XLSX::Cell $value) {
             my @row := (@!rows[$row] //= Array[Spreadsheet::XLSX::Cell].new);
+            @!existing-rows.push: $row;
             @row[$col] = $value
         }
 
         method max-row {
             self!load-backing-rows;
             @!backing-rows.elems - 1
+        }
+
+        #| Returns first and last existing column index.
+        #| First index is inclusive, last index is exclusive.
+        method column-span(Int $row) {
+            my ($from, $to) = (0, 0);
+            with self!lookup-backing-row($row) -> LibXML::Element $backing-row {
+                ($from, $to) = get-attribute($backing-row, "spans").split(':');
+                $from .= Int;
+                $to .= Int;
+                $from--;
+            }
+            with @!rows[$row] -> @row {
+                ($from, $to) = 0, max($to, @row.elems);
+            }
+            ($from, $to)
         }
 
         method !maybe-load-from-backing(Int $row, Int $col) {
@@ -77,6 +165,7 @@ class Spreadsheet::XLSX::Worksheet {
                     $!backing.childNodes.map: -> LibXML::Element $backing-row {
                         if $backing-row.nodeName eq 'row' && $backing-row.hasAttribute('spans') {
                             my $row-str = get-attribute($backing-row, 'r');
+                            @!existing-rows.push: $row-str.Int - 1;
                             @!backing-rows[$row-str.Int - 1] = $backing-row;
                         }
                     }

@@ -1,0 +1,36 @@
+use Spreadsheet::XLSX;
+use Test;
+
+given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/iterator.xlsx')) {
+    isa-ok $_, Spreadsheet::XLSX, 'Load gave a Spreadsheet::XLSX instance';
+
+    my $iter = .worksheets[0].cells.iterator;
+    given $iter.pull-one -> $cell {
+        is $cell.row, 0, "Iterator gives correct row";
+        is $cell.column, 0, "Iterator gives correct col";
+        is $cell.value, 'A1', 'First cell value';
+    }
+    given $iter.pull-one -> $cell {
+        is $cell.row, 0, "Iterator gives correct row";
+        is $cell.column, 1, "Iterator gives correct col";
+        is $cell.value, 'B1', 'Second cell value';
+    }
+    given $iter.pull-one -> $cell {
+        is $cell.row, 0, "Iterator gives correct row";
+        is $cell.column, 3, "Iterator gives correct col";
+        is $cell.value, 'D1', 'Empty cells are skipped';
+    }
+    given $iter.pull-one -> $cell {
+        is $cell.row, 2, "Iterator gives correct row";
+        is $cell.column, 1, "Iterator gives correct col";
+        is $cell.value, 'B3', 'Empty rows are skipped, first col empty is OK';
+    }
+    given $iter.pull-one -> $cell {
+        is $cell.row, 16, "Iterator gives correct row";
+        is $cell.column, 5, "Iterator gives correct col";
+        is $cell.value, 'F17', 'larger skips are OK as well';
+    }
+    ok $iter.pull-one =:= IterationEnd, 'End after last cell on sheet';
+}
+
+done-testing;
