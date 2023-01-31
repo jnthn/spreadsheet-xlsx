@@ -21,9 +21,11 @@
     "Spreadsheet::XLSX::SharedStrings": "lib/Spreadsheet/XLSX/SharedStrings.rakumod",
     "Spreadsheet::XLSX::Styles": "lib/Spreadsheet/XLSX/Styles.rakumod",
     "Spreadsheet::XLSX::Workbook": "lib/Spreadsheet/XLSX/Workbook.rakumod",
-    "Spreadsheet::XLSX::Worksheet": "lib/Spreadsheet/XLSX/Worksheet.rakumod"
+    "Spreadsheet::XLSX::Worksheet": "lib/Spreadsheet/XLSX/Worksheet.rakumod",
+    "Spreadsheet::XLSX::XMLHelpers": "lib/Spreadsheet/XLSX/XMLHelpers.rakumod"
   },
   "resources": [],
   "license": "Artistic-2.0",
-  "source-url": "https://github.com/jnthn/spreadsheet-xlsx.git"
+  "source-url": "https://github.com/jnthn/spreadsheet-xlsx.git",
+  "raku": "6.*"
 }

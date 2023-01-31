@@ -1,0 +1,162 @@
+use v6.d;
+use Spreadsheet::XLSX;
+use Spreadsheet::XLSX::Styles;
+use Test;
+
+plan 3;
+
+sub test-styles($ws, Str:D $source) is test-assertion {
+    subtest "Test styles from " ~ $source, {
+        plan 7;
+
+        my $styles = $ws.styles;
+
+        my sub test-count($xml-sequence, $expected-count) is test-assertion {
+            is $xml-sequence.count, $expected-count, "count is pulled from the source";
+            is $xml-sequence.elems, $expected-count, "number of loaded items equals to the count";
+        }
+
+        my sub test-item-type($xml-sequence, Mu \expected-type) is test-assertion {
+            ok ? ($xml-sequence.map({ .WHAT }).all ~~ expected-type),
+               "all items are " ~ (-> Any \eg-type { eg-type.^name }).(expected-type).gist
+        }
+
+        subtest "Number Formats", {
+            plan 6;
+
+            my $numFmts := $styles.number-formats;
+
+            isa-ok $numFmts, Spreadsheet::XLSX::Styles::NumberFormats;
+            test-count($numFmts, 2);
+            test-item-type($numFmts, Spreadsheet::XLSX::Styles::NumberFormat);
+
+            is-deeply $numFmts.map(*.id).list, (164, 165), "format IDs";
+            is-deeply $numFmts.map(*.code).list,
+                      (q<"$"#,##0.00;[Red]"$"#,##0.00>, q<#,##0.0>),
+                      "format codes";
+        }
+
+        subtest "Fonts", {
+            plan 11;
+
+            my $fonts = $styles.fonts;
+
+            isa-ok $fonts, Spreadsheet::XLSX::Styles::Fonts;
+            test-count($fonts, 3);
+            test-item-type($fonts, Spreadsheet::XLSX::Styles::Font);
+
+            is-deeply $fonts.map(*.name), ('Calibri', 'Andale Mono', 'Lucida Sans'), "font names";
+            is-deeply $fonts.map(*.size), (12, 11, 12), "font sizes";
+            is-deeply $fonts.map(*.family), (Swiss, Swiss, Swiss), "font families";
+            is-deeply $fonts.map(*.color.theme), (1, 3, 1), "color themes";
+            is $fonts[1].color.tint, 0.79998168889431442, "color tint for Andale Mono";
+            is-deeply $fonts.map(*.scheme), (SchemeMinor, FontScheme, FontScheme), "schemes";
+            is-deeply $fonts.map(*.strike), (Bool, Bool, True), "strike";
+        }
+
+        subtest "Fills", {
+            plan 14;
+            my $fills = $styles.fills;
+
+            isa-ok $fills, Spreadsheet::XLSX::Styles::Fills;
+            test-count($fills, 5);
+            # TODO Having some gradients would be nice. But for now we only have patterns in the source .xlsx
+            test-item-type($fills, Spreadsheet::XLSX::Styles::PatternFill | Spreadsheet::XLSX::Styles::GradientFill);
+
+            is-deeply $fills.map(*.fill-type), (NoFill, Gray125, LightGrid, Solid, Solid), "fill patterns";
+            nok $fills[0].foreground-color.defined, "first fill uses no foreground color";
+            nok $fills[0].background-color.defined, "first fill uses no background color";
+            is $fills[2].foreground-color.rgb, "FF92D050", "3rd fill foreground color";
+            is $fills[2].background-color.rgb, "FF2067F0", "3rd fill background color";
+            is $fills[3].foreground-color.rgb, "FF00B050", "4th fill foreground color";
+            is $fills[3].background-color.indexed, 64, "4th fill background color is indexed";
+            nok $fills[3].background-color.rgb.defined, "4th fill background color is not using RGB";
+            is $fills[4].foreground-color.theme, 2, "5th fill foreground color is a theme";
+            nok $fills[4].foreground-color.rgb.defined, "5th fill foreground color is not using RGB";
+        }
+
+        subtest "Borders", {
+            plan 9;
+
+            my $borders = $styles.borders;
+
+            isa-ok $borders, Spreadsheet::XLSX::Styles::Borders;
+            test-count($borders, 5);
+            test-item-type($borders, Spreadsheet::XLSX::Styles::Border);
+
+            is-deeply $borders.map(*.diagonal-down), (Bool, True, True, True, True), "borders diagonal down";
+            is-deeply $borders.map(*.left.style), (NoBorder, NoBorder, NoBorder, NoBorder, Thin), "borders left style";
+            nok $borders[0].left.color.defined, "1st border left color is not defined";
+            ok $borders[3].diagonal.color.auto, "4th border diagonal color is auto";
+            is $borders[4].left.color.indexed, 64, "5th border left color is indexed";
+        }
+
+        subtest "Formatting Records", {
+            plan 11;
+            my $fmt-records = $styles.formatting-records;
+
+            isa-ok $fmt-records, Spreadsheet::XLSX::Styles::Formats;
+            test-count($fmt-records, 2);
+            test-item-type($fmt-records, Spreadsheet::XLSX::Styles::Format);
+
+            is-deeply $fmt-records.map(*.number-format-id), (0, 164), "cell style number format IDs";
+            is-deeply $fmt-records.map(*.font-id), (0, 2), "cell style font IDs";
+            is-deeply $fmt-records.map(*.fill-id), (0, 4), "cell style fill IDs";
+            is-deeply $fmt-records.map(*.border-id), (0, 0), "cell style border IDs";
+
+            nok $fmt-records[0].alignment.defined, "1st record has no alignment";
+            is $fmt-records[1].alignment.vertical, CenterVerticalAlign, "2nd record vertical alignment";
+            is $fmt-records[1].alignment.text-rotation, 12, "2nd record alignment text rotation";
+        }
+
+        subtest "Cell Formats", {
+            plan 16;
+            my $cell-formats = $styles.cell-formats;
+
+            isa-ok $cell-formats, Spreadsheet::XLSX::Styles::Formats;
+            test-count($cell-formats, 9);
+            test-item-type($cell-formats, Spreadsheet::XLSX::Styles::Format);
+
+            is-deeply $cell-formats.map(*.number-format-id), (0 xx 7, 164, 165).flat, "number format IDs";
+            is-deeply $cell-formats.map(*.font-id), (0 xx 6, 1, 2, 0).flat, "font IDs";
+            is-deeply $cell-formats.map(*.fill-id), (0 , 2, 0, 0, 0, 0, 3, 4, 0).flat, "fill IDs";
+            is-deeply $cell-formats.map(*.x-format-id), (0 xx 7, 1, 0).flat, "x-format IDs";
+            ok $cell-formats[1].apply-fill, "2nd format apply fill";
+            ok $cell-formats[2..5].map(*.apply-border).all, "3rd to 6th format apply border";
+            is-deeply $cell-formats.map(*.border-id), (0, 0, 1, 2, 3, 4, 0, 0, 0), "border IDs";
+            ok $cell-formats[6].apply-fill, "7th format apply fill";
+            ok $cell-formats[6].apply-font, "7th format apply font";
+            is $cell-formats[7].alignment.vertical, CenterVerticalAlign, "8th format vertical align";
+            is $cell-formats[7].alignment.text-rotation, 12, "8th format vertical align";
+            ok $cell-formats[8].apply-number-format, "9th format apply number format";
+        }
+
+        subtest "Cell Styles", {
+            plan 7;
+            my $cell-styles = $styles.cell-styles;
+
+            isa-ok $cell-styles, Spreadsheet::XLSX::Styles::CellStyles;
+            test-count($cell-styles, 2);
+            test-item-type($cell-styles, Spreadsheet::XLSX::Styles::CellStyle);
+
+            is-deeply $cell-styles.map(*.name), <Fubar Normal>, "cell style names";
+            is-deeply $cell-styles.map(*.number-format-id), (1, 0), "number formats";
+            is-deeply $cell-styles.map(*.builtin-id), (UInt, 0), "built-in IDs";
+        }
+    }
+}
+
+my $orig-ws;
+
+lives-ok
+    { $orig-ws = Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/stylish.xlsx')) },
+    "loaded a sheet with some styles in it";
+
+test-styles($orig-ws, "file");
+
+$orig-ws.save($*PROGRAM.parent.add('test-data/stylish-out.xlsx'));
+
+my $copy-ws = Spreadsheet::XLSX.load( $orig-ws.to-blob );
+test-styles($copy-ws, "deserialization");
+
+done-testing;
