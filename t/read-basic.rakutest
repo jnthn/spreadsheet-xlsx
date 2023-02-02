@@ -69,14 +69,14 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
         isa-ok $_, Spreadsheet::XLSX::SharedStrings;
         ok .defined, 'Have shared strings';
         given .[0] {
-            isa-ok $_, Spreadsheet::XLSX::Cell::Text,
-                'First entry is a text cell';
-            is .value, 'Song', 'Correct value';
+            isa-ok $_, Str,
+                'First entry is a String';
+            is $_, 'Song', 'Correct value';
         }
         given .[6] {
-            isa-ok $_, Spreadsheet::XLSX::Cell::Text,
-                    'Sixth entry is a text cell';
-            is .value, 'Allesfresser', 'Correct value';
+            isa-ok $_, Str,
+                    'Sixth entry is a String';
+            is $_, 'Allesfresser', 'Correct value';
         }
         isa-ok .[42], Failure, 'Get Failure if shared index is out of range';
     }

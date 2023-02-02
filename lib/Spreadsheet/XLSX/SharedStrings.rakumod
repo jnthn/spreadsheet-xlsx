@@ -53,13 +53,11 @@ class Spreadsheet::XLSX::SharedStrings does Positional {
         self.new(:$root)
     }
 
-    #| Get the shared string entry at the given position. Creates a fresh
-    #| object each time, which a given sheet can cache as a particular
-    #| cell position.
+    #| Get the shared string entry at the given position.
     method AT-POS(Int $idx) {
         with $!backing {
             with @!string-cache[$idx] -> $val {
-                return shared-cell-from-xml($val);
+                return $val;
             }
         }
         fail "Could not resolve shared string entry $idx";

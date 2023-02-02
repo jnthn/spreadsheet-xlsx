@@ -168,7 +168,7 @@ class Spreadsheet::XLSX::Cell::Empty does Spreadsheet::XLSX::Cell {
 
 #| Takes an XML node from shared strings and produces the correct kind of
 #| Cell object from it.
-sub cell-from-xml(LibXML::Element $element) is export {
+sub cell-from-xml(LibXML::Element $element, $shared-strings) is export {
     return Spreadsheet::XLSX::Cell::Empty.new unless $element.hasChildNodes;
 
     my LibXML::Attr $type-node = $element.getAttributeNode('t');
@@ -183,6 +183,14 @@ sub cell-from-xml(LibXML::Element $element) is export {
                     message => 'Number cell node missing v value tag';
             }
             Spreadsheet::XLSX::Cell::Number.new(value => +$v-node.string-value, :$formula);
+        when 's' {
+            my LibXML::Element $shared-index-holder = $element.first;
+            unless $shared-index-holder.nodeName eq 'v' {
+                die X::Spreadsheet::XLSX::Format.new:
+                        message => "Missing v node for shared cell value";
+            }
+            Spreadsheet::XLSX::Cell::Text.new(value => $shared-strings[$shared-index-holder.string-value.Int],
+                                                :$formula);
         }
         when 'inlineStr' {
             my LibXML::Element $is-node = $element.first;
@@ -240,8 +248,4 @@ sub cell-from-xml(LibXML::Element $element) is export {
     }
 }
 
-#| Takes a Str value from shared strings and produces a Cell object from it.
-sub shared-cell-from-xml(Str $val) is export {
-    Spreadsheet::XLSX::Cell::Text.new(value => $val)
-}
 
