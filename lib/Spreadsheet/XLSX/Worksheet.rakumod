@@ -111,12 +111,24 @@ class Spreadsheet::XLSX::Worksheet {
 
         submethod TWEAK(LibXML::Element :$!backing --> Nil) {}
 
-        multi method AT-POS(Int $row, Int $col) is raw {
+        multi method AT-POS(Int $row, Int $col --> Spreadsheet::XLSX::Cell) is raw {
             my @row := (@!rows[$row] //= Array[Spreadsheet::XLSX::Cell].new);
-            my $cell := @row[$col];
-            $cell //= self!maybe-load-from-backing($row, $col);
+            without @row[$col] {
+                my @new-cells = self!maybe-load-from-backing($row, $col);
+                if @new-cells {
+                    loop (my ($pos, $tcol) = 0, @new-cells[0].column; $pos < @new-cells.elems; $tcol++) {
+                        if @new-cells[$pos].column == $tcol {
+                            @row[$tcol] //= @new-cells[$pos];
+                            $pos++;
+                        }
+                        else {
+                            @row[$tcol] //= Spreadsheet::XLSX::Cell;
+                        }
+                    }
+                }
+            }
             @!existing-rows.push: $row;
-            $cell
+            @row[$col] //= Spreadsheet::XLSX::Cell
         }
 
         multi method ASSIGN-POS(Int $row, Int $col, Spreadsheet::XLSX::Cell $value) {
@@ -149,14 +161,16 @@ class Spreadsheet::XLSX::Worksheet {
         method !maybe-load-from-backing(Int $row, Int $col) {
             with self!lookup-backing-row($row) -> LibXML::Element $backing-row {
                 my ($from, $to) = get-attribute($backing-row, "spans").split(':');
+                my @cells;
                 if $from <= $col + 1 <= $to {
-                    my LibXML::Element $doc-col = $backing-row.childNodes[$col - ($from - 1)];
-                    if $doc-col && $doc-col.nodeName eq 'c' {
-                        return cell-from-xml($doc-col, $!worksheet.root.shared-strings);
+                    for $backing-row.childNodes -> LibXML::Element $doc-col {
+                        if $doc-col && $doc-col.nodeName eq 'c' {
+                            @cells.push: cell-from-xml($doc-col, $!worksheet.root.shared-strings);
+                        }
                     }
                 }
+                return @cells;
             }
-            return Spreadsheet::XLSX::Cell;
         }
 
         method !load-backing-rows {

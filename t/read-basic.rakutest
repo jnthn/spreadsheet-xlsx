@@ -73,7 +73,7 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
                 'First entry is a String';
             is $_, 'Song', 'Correct value';
         }
-        given .[6] {
+        given .[5] {
             isa-ok $_, Str,
                     'Sixth entry is a String';
             is $_, 'Allesfresser', 'Correct value';
@@ -89,6 +89,10 @@ given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/basic.xlsx')) {
             given .cells[0;0] {
                 isa-ok $_, Spreadsheet::XLSX::Cell::Text, '0;0 is a text cell';
                 is .value, 'Band', 'Read cell value 0;0 (text)';
+            }
+            given .cells[1;2] {
+                isa-ok $_, Spreadsheet::XLSX::Cell::Number, '1;2 (after missing cell) is a text cell';
+                is .value, 9, 'Read cell value 1;2 (number)';
             }
             given .cells[3;1] {
                 isa-ok $_, Spreadsheet::XLSX::Cell::Text, '3;1 is a text cell';
