@@ -1,0 +1,48 @@
+use Spreadsheet::XLSX;
+use Spreadsheet::XLSX::Cell;
+use Test;
+
+given Spreadsheet::XLSX.load($*PROGRAM.parent.add('test-data/types.xlsx')) {
+    isa-ok $_, Spreadsheet::XLSX, 'Loaded gave a Spreadsheet::XLSX instance';
+
+    given .worksheets {
+        given .[0] {
+            is .name, 'Types', 'Correct name of first worksheet';
+            given .cells[1;1] {
+                isa-ok $_, Spreadsheet::XLSX::Cell::Number, '1;1 is a number cell';
+                is .value, 15, 'Read cell value 1;1 (number)';
+            }
+            given .cells[2;1] {
+                isa-ok $_, Spreadsheet::XLSX::Cell::Text, '2;1 is a text cell';
+                is .value, 'FooFighters', 'Read cell value 2;1 (text)';
+            }
+            given .cells[3;1] {
+                isa-ok $_, Spreadsheet::XLSX::Cell::Bool, '3;1 is a bool cell';
+                is .value, True, 'Read cell value 3;1 (bool)';
+            }
+            given .cells[4;1] {
+                isa-ok $_, Spreadsheet::XLSX::Cell::Error, '4;1 is an error cell';
+                is .value, DIV0, 'Read cell value 4;1 (error)';
+            }
+            nok .cells[5;1].defined, 'Unset cell returns undefined';
+            given .cells[1;2] {
+                isa-ok $_, Spreadsheet::XLSX::Cell::Number, '1;2 is a number cell';
+                is .formula, '5+10', 'Read cell formula 1;2 (number)';
+            }
+            given .cells[2;2] {
+                isa-ok $_, Spreadsheet::XLSX::Cell::Text, '2;2 is a text cell';
+                is .formula, '"Foo"&"Fighters"', 'Read cell formula 2;2 (text)';
+            }
+            given .cells[3;2] {
+                isa-ok $_, Spreadsheet::XLSX::Cell::Bool, '3;2 is a bool cell';
+                is .formula, 'AND(TRUE,TRUE)', 'Read cell formula 3;2 (bool)';
+            }
+            given .cells[4;2] {
+                isa-ok $_, Spreadsheet::XLSX::Cell::Error, '4;2 is an error cell';
+                is .formula, '1/0', 'Read cell formula 4;2 (error)';
+            }
+        }
+    }
+}
+
+done-testing;
