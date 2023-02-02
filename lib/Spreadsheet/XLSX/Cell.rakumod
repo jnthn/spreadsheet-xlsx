@@ -10,6 +10,12 @@ role Spreadsheet::XLSX::Cell {
     #| Cell formula.
     has Str $.formula;
 
+    #| Row.
+    has Int $.row is required;
+
+    #| Column.
+    has Int $.column is required;
+
     #| Sync the value to XML.
     method sync-value-xml(LibXML::Document $document, LibXML::Element $col --> Nil) { ... }
 
@@ -172,6 +178,12 @@ sub cell-from-xml(LibXML::Element $element, $shared-strings) is export {
     return Spreadsheet::XLSX::Cell::Empty.new unless $element.hasChildNodes;
 
     my LibXML::Attr $type-node = $element.getAttributeNode('t');
+    my LibXML::Attr $address-attr = $element.getAttributeNode('r');
+    unless $address-attr {
+        die X::Spreadsheet::XLSX::Format.new:
+                message => "Missing r cell attribute";
+    }
+    my ($row, $column) = parse-addr $address-attr.string-value;
     my $f-node = $element.childNodes.first: *.name eq 'f';
     my Str $formula = $_.string-value with $f-node;
     my $cell = do given $type-node ?? $type-node.string-value !! '' {
@@ -182,7 +194,9 @@ sub cell-from-xml(LibXML::Element $element, $shared-strings) is export {
                 die X::Spreadsheet::XLSX::Format.new:
                     message => 'Number cell node missing v value tag';
             }
-            Spreadsheet::XLSX::Cell::Number.new(value => +$v-node.string-value, :$formula);
+            Spreadsheet::XLSX::Cell::Number.new(value => +$v-node.string-value,
+                                                :$row, :$column, :$formula);
+        }
         when 's' {
             my LibXML::Element $shared-index-holder = $element.first;
             unless $shared-index-holder.nodeName eq 'v' {
@@ -190,7 +204,7 @@ sub cell-from-xml(LibXML::Element $element, $shared-strings) is export {
                         message => "Missing v node for shared cell value";
             }
             Spreadsheet::XLSX::Cell::Text.new(value => $shared-strings[$shared-index-holder.string-value.Int],
-                                                :$formula);
+                                                :$row, :$column, :$formula);
         }
         when 'inlineStr' {
             my LibXML::Element $is-node = $element.first;
@@ -202,7 +216,8 @@ sub cell-from-xml(LibXML::Element $element, $shared-strings) is export {
             unless $content-node.nodeName eq 't' {
                 die X::NYI.new(feature => "Node of type $content-node.nodeName() in inline string");
             }
-            Spreadsheet::XLSX::Cell::Text.new(value => $content-node.string-value, :$formula);
+            Spreadsheet::XLSX::Cell::Text.new(value => $content-node.string-value,
+                                                :$row, :$column, :$formula);
         }
         when 'str' {
             my $v-node = $element.childNodes.first: *.name eq 'v';
@@ -211,7 +226,7 @@ sub cell-from-xml(LibXML::Element $element, $shared-strings) is export {
                         message => 'str cell missing v tag';
             }
             Spreadsheet::XLSX::Cell::Text.new(value => $v-node.string-value,
-                                                :$row, $column, :$formula);
+                                                :$row, :$column, :$formula);
         }
         when 'b' {
             my $v-node = $element.childNodes.first: *.name eq 'v';
@@ -219,7 +234,8 @@ sub cell-from-xml(LibXML::Element $element, $shared-strings) is export {
                 die X::Spreadsheet::XLSX::Format.new:
                         message => 'b cell missing v tag';
             }
-            Spreadsheet::XLSX::Cell::Bool.new(value => +$v-node.string-value == 0 ?? False !! True, :$formula);
+            Spreadsheet::XLSX::Cell::Bool.new(value => +$v-node.string-value == 0 ?? False !! True,
+                                                :$row, :$column, :$formula);
         }
         when 'e' {
             my $v-node = $element.childNodes.first: *.name eq 'v';
@@ -240,7 +256,8 @@ sub cell-from-xml(LibXML::Element $element, $shared-strings) is export {
                     die X::NYI.new(feature => "Excel cells of error type '$_'");
                 }
             }
-            Spreadsheet::XLSX::Cell::Error.new(value => $err, :$formula);
+            Spreadsheet::XLSX::Cell::Error.new(value => $err,
+                                                :$row, :$column, :$formula);
         }
         default {
             die X::NYI.new(feature => "Excel cells of type '$_'");
@@ -248,4 +265,17 @@ sub cell-from-xml(LibXML::Element $element, $shared-strings) is export {
     }
 }
 
+sub parse-addr(Str $addr) {
+    my $pos = 0;
+    my @parts = $addr.comb;
+    my $val = 0;
+    loop {
+        my $v = ord(@parts[$pos]) - ord('A') + 1;
+        last if $v <= 0;
+        $val = $val * 26 + $v;
+        $pos++;
+    }
+    $val--;
+    ($addr.substr($pos).Int - 1, $val);
+}
 
