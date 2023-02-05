@@ -62,7 +62,12 @@ class Spreadsheet::XLSX::Worksheet {
             with self!lookup-backing-row($row) -> LibXML::Element $backing-row {
                 my ($from, $to) = get-attribute($backing-row, "spans").split(':');
                 if $from <= $col + 1 <= $to {
-                    my LibXML::Element $doc-col = $backing-row.childNodes[$col - ($from - 1)];
+                    my $cell-ref = (65 + $col - ($from - 1)).chr ~ ($row + 1);
+                    # This could be a sparse row with missing columns. The only reliable approach is to search by
+                    # `A1`-style reference.
+                    my LibXML::Element $doc-col =
+                        $backing-row.findnodes(q«./*[local-name() = 'c' and namespace-uri() = '»
+                            ~ $backing-row.namespaceURI ~ q«' and @r = '» ~ $cell-ref ~ q«']» ).first;
                     if $doc-col && $doc-col.nodeName eq 'c' {
                         return cell-from-xml($doc-col, $!worksheet.root);
                     }
