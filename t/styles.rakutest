@@ -1,6 +1,7 @@
 use v6.d;
 use Spreadsheet::XLSX;
 use Spreadsheet::XLSX::Styles;
+use Spreadsheet::XLSX::Types;
 use Test;
 
 plan 3;
@@ -43,7 +44,7 @@ sub test-styles($ws, Str:D $source) is test-assertion {
 
             isa-ok $fonts, Spreadsheet::XLSX::Styles::Fonts;
             test-count($fonts, 3);
-            test-item-type($fonts, Spreadsheet::XLSX::Styles::Font);
+            test-item-type($fonts, Font);
 
             is-deeply $fonts.map(*.name), ('Calibri', 'Andale Mono', 'Lucida Sans'), "font names";
             is-deeply $fonts.map(*.size), (12, 11, 12), "font sizes";
@@ -132,15 +133,14 @@ sub test-styles($ws, Str:D $source) is test-assertion {
         }
 
         subtest "Cell Styles", {
-            plan 7;
+            plan 6;
             my $cell-styles = $styles.cell-styles;
 
             isa-ok $cell-styles, Spreadsheet::XLSX::Styles::CellStyles;
             test-count($cell-styles, 2);
-            test-item-type($cell-styles, Spreadsheet::XLSX::Styles::CellStyle);
+            test-item-type($cell-styles, Spreadsheet::XLSX::Styles::CT_CellStyle);
 
             is-deeply $cell-styles.map(*.name), <Fubar Normal>, "cell style names";
-            is-deeply $cell-styles.map(*.number-format-id), (1, 0), "number formats";
             is-deeply $cell-styles.map(*.builtin-id), (UInt, 0), "built-in IDs";
         }
     }

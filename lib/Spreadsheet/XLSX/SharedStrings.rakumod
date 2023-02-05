@@ -1,17 +1,17 @@
 use LibXML::Document;
 use Spreadsheet::XLSX::Cell;
 use Spreadsheet::XLSX::Root;
+use Spreadsheet::XLSX::XMLHelpers;
+use Spreadsheet::XLSX::Types;
 
 #| Since spreadsheets often contain a lot of repetition, a shared strings
 #| table is used to extract the commonality.
-class Spreadsheet::XLSX::SharedStrings does Positional {
+class Spreadsheet::XLSX::SharedStrings is xml-sequence("sst", :si(Spreadsheet::XLSX::Types::CT_Rst)) {
     #| The root, used for resolutions at the document level.
     has Spreadsheet::XLSX::Root $.root is required;
 
-    #| The backing document from the shared strings table, if any.
-    has LibXML::Element $!backing;
-
-    submethod TWEAK(LibXML::Element :$!backing --> Nil) {}
+    has UInt $.count is xml-attr;
+    has UInt $.unique-count is xml-attr;
 
     #| Create a string table from an XML document.
     method from-xml(Str $xml, Spreadsheet::XLSX::Root :$root! --> Spreadsheet::XLSX::SharedStrings) {
@@ -21,7 +21,7 @@ class Spreadsheet::XLSX::SharedStrings does Positional {
             die X::Spreadsheet::XLSX::Format.new: message =>
                     'Shared strings file did not start with tag sst';
         }
-        self.new(:$root, :backing($sst))
+        self.from-xml-element($sst, :profile{ :$root })
     }
 
     #| Create a new, empty, string table.
@@ -29,19 +29,19 @@ class Spreadsheet::XLSX::SharedStrings does Positional {
         self.new(:$root)
     }
 
-    #| Get the shared string entry at the given position. Creates a fresh
-    #| object each time, which an given sheet can cache as a particular
-    #| cell position.
-    method AT-POS(Int $idx) {
-        with $!backing {
-            with $!backing.childNodes[$idx] -> LibXML::Element $si {
-                if $si.nodeName ne 'si' {
-                    die X::Spreadsheet::XLSX::Format.new: message =>
-                            'Shared strings entry was not an si node';
-                }
-                return shared-cell-from-xml($si.first);
-            }
-        }
-        fail "Could not resolve shared string entry $idx";
-    }
+#    #| Get the shared string entry at the given position. Creates a fresh
+#    #| object each time, which an given sheet can cache as a particular
+#    #| cell position.
+#    method AT-POS(Int $idx) {
+#        with $!backing {
+#            with $!backing.childNodes[$idx] -> LibXML::Element $si {
+#                if $si.nodeName ne 'si' {
+#                    die X::Spreadsheet::XLSX::Format.new: message =>
+#                            'Shared strings entry was not an si node';
+#                }
+#                return shared-cell-from-xml($si.first);
+#            }
+#        }
+#        fail "Could not resolve shared string entry $idx";
+#    }
 }

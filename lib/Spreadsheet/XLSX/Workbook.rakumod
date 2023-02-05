@@ -90,7 +90,7 @@ class Spreadsheet::XLSX::Workbook {
             }
         }
         else {
-            Spreadsheet::XLSX::SharedStrings.empty(:$root)
+            Spreadsheet::XLSX::Styles.new(:$root)
         }
     }
 

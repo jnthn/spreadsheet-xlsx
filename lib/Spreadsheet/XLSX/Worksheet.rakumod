@@ -64,7 +64,7 @@ class Spreadsheet::XLSX::Worksheet {
                 if $from <= $col + 1 <= $to {
                     my LibXML::Element $doc-col = $backing-row.childNodes[$col - ($from - 1)];
                     if $doc-col && $doc-col.nodeName eq 'c' {
-                        return self!load-cell($doc-col);
+                        return cell-from-xml($doc-col, $!worksheet.root);
                     }
                 }
             }
@@ -87,21 +87,6 @@ class Spreadsheet::XLSX::Worksheet {
         method !lookup-backing-row($row) {
             self!load-backing-rows;
             @!backing-rows[$row]
-        }
-
-        method !load-cell(LibXML::Element $cell --> Spreadsheet::XLSX::Cell) {
-            my $type = get-attribute($cell, 't', :optional) // '';
-            if $type eq 's' {
-                my LibXML::Element $shared-index-holder = $cell.first;
-                unless $shared-index-holder.nodeName eq 'v' {
-                    die X::Spreadsheet::XLSX::Format.new:
-                            message => "Missing v node for shared cell value";
-                }
-                $!worksheet.root.shared-strings[$shared-index-holder.string-value.Int]
-            }
-            else {
-                cell-from-xml($cell)
-            }
         }
 
         #| Synchronize the values of cells we've set/changed with the

@@ -9,63 +9,9 @@ use Spreadsheet::XLSX::XMLHelpers;
 #| the module user. This object models the style storage model, while a
 #| flat view is provided by Spreadsheet::XLSX::CellStyle.
 class Spreadsheet::XLSX::Styles does XMLRepresentation["styleSheet"] {
-
-    #| A color definition
-    class Color does XMLRepresentation["color"] {
-        has Bool $.auto is xml-attr;
-        has UInt $.indexed is xml-attr;
-        has Str $.rgb is xml-attr;
-        has UInt $.theme is xml-attr;
-        has Real $.tint is xml-attr;
-    }
-
-    #| Font families (common stroke and serif characteristics).
-    enum FontFamily is export (:NotApplicable(0), :Roman(1), :Swiss(2), :Modern(3),
-                               :Script(4), :Decorative(5));
-
-    #| Vertical alignments.
-    enum VerticalAlignRun is export (:Baseline<baseline>, :Subscript<subscript>, :Superscript<superscript>);
-
-    #| Font scheme.
-    enum FontScheme is export (:SchemeNone<none>, :SchemeMajor<major>, :SchemeMinor<minor>);
-
-    #| Underlines
-    enum UnderlineValues is export (:None<none>, :SingleLine<single>, :DoubleLine<double>,
-                                    :SingleAccounting<singleAccounting>,
-                                    :DoubleAccounting<doubleAccounting>);
-
-    #| A font in the style store.
-    class Font does XMLRepresentation["font"] {
-        has Str $.name is xml-elem;
-        has Int $.charset is xml-elem;
-        has FontFamily $.family is xml-elem;
-        has Bool $.bold is xml-elem<b>;
-        has Bool $.italic is xml-elem<i>;
-        has Bool $.strike is xml-elem;
-        has Bool $.outline is xml-elem;
-        has Bool $.shadow is xml-elem;
-        has Bool $.condense is xml-elem;
-        has Bool $.extend is xml-elem;
-        has Color $.color is xml-elem;
-        has Real $.size is xml-elem<sz>;
-        has UnderlineValues $.underline is xml-elem<u>;
-        has VerticalAlignRun $.vertical-align is xml-elem<vertAlign>;
-        has FontScheme $.scheme is xml-elem;
-    }
+    use Spreadsheet::XLSX::Types;
 
     class Fonts is xml-sequence(<fonts>, Font) does XMLCounting { }
-
-    #| A fill in the style store.
-    role Fill {
-        #| Produce an XML element containing the fill information.
-        method fill-xml-element(LibXML::Document:D $doc, LibXML::Element:D $fill-elem --> LibXML::Element:D) {
-            given $doc.createElement('fill') {
-                .add: $fill-elem;
-                $_
-            }
-        }
-
-    }
 
     #| The available types of patterns for a pattern fill.
     enum FillType is export (:NoFill<none>, :Solid<solid>, :MediumGray<mediumGray>,
@@ -76,6 +22,17 @@ class Spreadsheet::XLSX::Styles does XMLRepresentation["styleSheet"] {
                              :LightVertical<lightVertical>, :LightDown<lightDown>,
                              :LightUp<lightUp>, :LightGrid<lightGrid>, :LightTrellis<lightTrellis>,
                              :Gray125<gray125>, :Gray0625<gray0625>);
+
+    #| A fill in the style store.
+    role Fill {
+        #| Produce an XML element containing the fill information.
+        method fill-xml-element(LibXML::Document:D $doc, LibXML::Element:D $fill-elem --> LibXML::Element:D) {
+            given $doc.createElement('fill') {
+                .add: $fill-elem;
+                $_
+            }
+        }
+    }
 
     enum GradientType is export (:Linear<linear>, :Path<path>);
 
@@ -173,7 +130,70 @@ class Spreadsheet::XLSX::Styles does XMLRepresentation["styleSheet"] {
         has Str:D $.code is required is xml-attr<formatCode>;
     }
 
-    class NumberFormats is xml-sequence(<numFmts>, NumberFormat) does XMLCounting {}
+    class NumberFormats is xml-sequence(<numFmts>, NumberFormat) does XMLCounting {
+
+        my @std-number-formats = ( (0,  'General'),
+                                   (1,  '0'),
+                                   (2,  '0.00'),
+                                   (3,  '#,##0'),
+                                   (4,  '#,##0.00'),
+                                   (9,  '0%'),
+                                   (10, '0.00%'),
+                                   (11, '0.00E+00'),
+                                   (12, '# ?/?'),
+                                   (13, '# ??/??'),
+                                   (14, 'mm-dd-yy'),
+                                   (15, 'd-mmm-yy'),
+                                   (16, 'd-mmm'),
+                                   (17, 'mmm-yy'),
+                                   (18, 'h:mm AM/PM'),
+                                   (19, 'h:mm:ss AM/PM'),
+                                   (20, 'h:mm'),
+                                   (21, 'h:mm:ss'),
+                                   (22, 'm/d/yy h:mm'),
+                                   (37, '#,##0 ;(#,##0)'),
+                                   (38, '#,##0 ;[Red](#,##0)'),
+                                   (39, '#,##0.00;(#,##0.00)'),
+                                   (40, '#,##0.00;[Red](#,##0.00)'),
+                                   (45, 'mm:ss'),
+                                   (46, '[h]:mm:ss'),
+                                   (47, 'mmss.0'),
+                                   (48, '##0.0E+0'),
+                                   (49, '@') ).map({ NumberFormat.new(id => .[0], code => .[1]) });
+
+        my %std-map{UInt} = @std-number-formats.map({ .id => $_ });
+
+        method by-id(::?CLASS:D: UInt:D $id) {
+            @std-number-formats.first(*.id == $id)
+                || self.first(*.id == $id)
+                || Nil
+        }
+
+        method by-code(::?CLASS:D: Str:D $code) {
+            @std-number-formats.first(*.code eq $code)
+                || self.first(*.code eq $code)
+                || Nil
+        }
+
+        method next-id(::?CLASS:D:) {
+            # A custom number format ID mut not be less than 164. At least this is the number we find in Excel-produced
+            # stylesheets.
+            self.elems
+                ?? self.max(*.id).id + 1
+                !! 164
+        }
+
+        method is-standard(NumberFormat:D $fmt) {
+            ? (%std-map{$fmt.id} andthen .code eq $fmt.code)
+        }
+
+        method add(::?CLASS:D: NumberFormat:D $fmt) {
+            given $fmt.clone(id => self.next-id) {
+                self.push: $_;
+                $_
+            }
+        }
+    }
 
     #| Cell alignment formatting. Part of a Format.
     class CellAlignment does XMLRepresentation["alignment"] {
@@ -204,14 +224,21 @@ class Spreadsheet::XLSX::Styles does XMLRepresentation["styleSheet"] {
         has Bool $.apply-border is xml-attr;
         has Bool $.apply-alignment is xml-attr;
         has Bool $.apply-protection is xml-attr;
+
+        method use-alignment     { ? ($!alignment.defined        && $!apply-alignment    ) }
+        method use-number-format { ? ($!number-format-id.defined && $!apply-number-format) }
+        method use-font          { ? ($!font-id.defined          && $!apply-font         ) }
+        method use-fill          { ? ($!fill-id.defined          && $!apply-fill         ) }
+        method use-border        { ? ($!border-id.defined        && $!apply-border       ) }
     }
 
     class Formats is xml-sequence(<cellXfs>, :xf(Format)) does XMLCounting {}
 
     #| A record representing the name and related formatting records for a named cell style in this workbook.
-    class CellStyle does XMLRepresentation["cellStyle"] {
+    # Use XML name for the class to make clear distinction from Spreadsheet::XLSX::CellStyle
+    class CT_CellStyle does XMLRepresentation["cellStyle"] {
         has Str $.name                              is xml-attr;
-        has UInt:D $.number-format-id is required   is xml-attr<xfId>;
+        has UInt:D $.format-id          is required is xml-attr<xfId>;
         has UInt $.builtin-id                       is xml-attr;
         # ??? No idea what "i" stands for. "item" or "inside"?
         has UInt $.ilevel                           is xml-attr<iLevel>;
@@ -219,7 +246,7 @@ class Spreadsheet::XLSX::Styles does XMLRepresentation["styleSheet"] {
         has Bool $.custom-builtin                   is xml-attr;
     }
 
-    class CellStyles is xml-sequence(<cellStyles>, CellStyle) does XMLCounting { }
+    class CellStyles is xml-sequence(<cellStyles>, CT_CellStyle) does XMLCounting { }
 
     #| All font records in the styles.
     has Fonts:D $.fonts is xml-elem .= new(Font.new);
@@ -244,52 +271,9 @@ class Spreadsheet::XLSX::Styles does XMLRepresentation["styleSheet"] {
     has Formats:D $.cell-formats is xml-elem .= new(Format.new);
 
     #| All cell styles
-    has CellStyles:D $.cell-styles is xml-elem .= new(CellStyle.new(:number-format-id(0)));
+    has CellStyles:D $.cell-styles is xml-elem .= new(CT_CellStyle.new(:format-id(0)));
 
-    #| Obtain a style ID for the specified combination of stylings.
-    method obtain-style-id-for(Font :$font, CellAlignment :$alignment,
-                               Str :$number-format --> Int) {
-        # Here we really should be clever and re-use existing IDs.
-        # However, for now, we just add everything we're given afresh.
-        my %ids;
-        with $font {
-            %ids<font-id> = $!fonts.elems;
-            %ids<apply-font> = True;
-            $!fonts.push($font);
-        }
-        with $alignment {
-            %ids<alignment> = $_;
-            %ids<apply-alignment> = True;
-        }
-        with $number-format {
-            with $!number-formats.first(*.code eq $number-format) {
-                %ids<number-format-id> = .id;
-            }
-            else {
-                my $id = ++$!max-number-format-id;
-                $!number-formats.push(NumberFormat.new(:$id, :code($number-format)));
-                %ids<number-format-id> = $id;
-            }
-            %ids<apply-number-format> = True;
-        }
-        my $style-id = $!cell-formats.elems;
-        $!cell-formats.push(Format.new(|%ids));
-        return $style-id;
-    }
-
-    method from-xml(Str $xml --> Spreadsheet::XLSX::Styles) {
-        my LibXML::Document:D $doc .= parse(:string($xml));
-        my LibXML::Element:D $root = $doc.documentElement;
-
-        if $root.localName ne 'styleSheet' {
-            die X::Spreadsheet::XLSX::Format.new: message => "Styles file did not start with tag 'styleSheet'";
-        }
-
-        self.from-xml-element($root)
-    }
-
-    #| Persist the styles information to XML.
-    method to-xml(--> Blob) {
+    method !xml-default-doc {
         # Create root element.
         my LibXML::Document $doc .= new: :version('1.0'), :enc('UTF-8');
         $doc.setStandalone(LibXML::Document::XmlStandaloneNo);
@@ -297,8 +281,69 @@ class Spreadsheet::XLSX::Styles does XMLRepresentation["styleSheet"] {
             'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
             'styleSheet');
         $doc.setDocumentElement($root);
-        self.to-xml-element($doc, $root);
+        $doc
+    }
 
+    method !obtain-id-for(XMLRepresentation:D $what, XMLSequence:D $where, :$autogen) {
+        return Nil without $what;
+        my $doc = self!xml-default-doc;
+        my $what-xml = $what.to-xml-element($doc);
+        for ^$where.elems -> $id {
+            return $id if $what-xml eq $where[$id].to-xml-element($doc);
+        }
+        $autogen ?? $where.push($what).end !! Nil
+    }
+
+    proto method id-for(|) {*}
+    multi method id-for(Font:D $font) {
+        self!obtain-id-for($font, $!fonts, |%_)
+    }
+    multi method id-for(Fill:D $fill) {
+        self!obtain-id-for($fill, $!fills, |%_)
+    }
+    multi method id-for(Border:D $border) {
+        self!obtain-id-for($border, $!borders, |%_)
+    }
+    multi method id-for(NumberFormat:D $num-fmt, :$autogen) {
+        if self!obtain-id-for($num-fmt, $!number-formats, |%_)
+            || $!number-formats.is-standard($num-fmt)
+        {
+            return $num-fmt.id;
+        }
+
+        return Nil unless $autogen;
+
+        # First try to select from existing number formats and choose one with the same format code
+        with $!number-formats.by-code($num-fmt.code) {
+            return .id
+        }
+
+        # If no format code match found then add a new format code. $!number-formats will set new format's ID.
+        $!number-formats.add($num-fmt).id
+    }
+    # Here we'd need to be explicit as we have $!formatting-records and we have $!cell-formats
+    multi method id-for(Format:D $format, Formats:D $formats) {
+        self!obtain-id-for($format, $formats, |%_)
+    }
+    multi method id-for(CT_CellStyle:D $cell-style) {
+        self!obtain-id-for($cell-style, $!cell-styles, |%_)
+    }
+
+    method from-xml(Str $xml --> Spreadsheet::XLSX::Styles) {
+        my LibXML::Document:D $doc .= parse(:string($xml));
+        my LibXML::Element:D $style-sheet = $doc.documentElement;
+
+        if $style-sheet.localName ne 'styleSheet' {
+            die X::Spreadsheet::XLSX::Format.new: message => "Styles file did not start with tag 'styleSheet'";
+        }
+
+        self.from-xml-element($style-sheet)
+    }
+
+    #| Persist the styles information to XML.
+    method to-xml(--> Blob) {
+        my LibXML::Document:D $doc = self!xml-default-doc;
+        self.to-xml-element($doc, $doc.documentElement);
         return $doc.Blob;
     }
 }

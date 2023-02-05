@@ -1,4 +1,6 @@
 use Spreadsheet::XLSX::Styles;
+use Spreadsheet::XLSX::Types;
+use Spreadsheet::XLSX::Root;
 
 #| Read and write styles on a cell. An XLSX stores styles in a form optimized
 #| for re-use, but not especially convenient to work with. This class serves
@@ -7,129 +9,296 @@ use Spreadsheet::XLSX::Styles;
 #| on this class, they are stored here, and then saved into the XLSX-level
 #| styles at the point of saving the sheet.
 class Spreadsheet::XLSX::CellStyle {
-    #| Changed values.
-    has %!changed;
+    use Spreadsheet::XLSX::XMLHelpers;
 
-    #| The style ID, if we have one.
-    has Int $!style-id;
-
-    #| Metadata about a style property, describing their backing in the
-    #| underlying style store.
-    my class Property {
-        has Mu $.type is required;
-        has Str $.attr-name;
-    }
-
-    #| Style properties metadata.
-    my constant %properties = %(
+    # Local aliases for attributes (properties) on group objects
+    my %prop-alias = %(
         font => %(
-            'bold' => Property.new(type => Bool),
-            'italic' => Property.new(type => Bool),
-            'font-size' => Property.new(type => Int, attr-name => 'size'),
+            :font-size<size>,
+            :font-name<name>,
         ),
         alignment => %(
-            'horizontal-align' => Property.new(type => HorizontalAlign, attr-name => 'horizontal'),
-            'vertical-align' => Property.new(type => VerticalAlign, attr-name => 'vertical'),
-            'wrap-text' => Property.new(type => Bool),
+            :horizontal-align<horizontal>,
+            :vertical-align<vertical>,
         ),
-        format => %( number-format => Property.new(type => Str) )
+        format => %(
+        ),
+        numformat => %(
+            :number-format<code>,
+        ),
     );
 
-    submethod TWEAK(Int :$!style-id --> Nil) {}
+    my role IndirectPropertyOf[::GroupType, Str:D $group-name] {
+        has $!group is built;
+        has %!changes;
+        has $!pos-changes;
 
-    #| Should a bold font be used.
-    method bold(--> Bool) is rw {
-        self!property('font', 'bold')
-    }
+        has %!group-types{Mu};
 
-    #| Should an italic font be used.
-    method italic(--> Bool) is rw {
-        self!property('font', 'italic')
-    }
+        method of { ($!group // GroupType).WHAT }
+        method group-name is pure { $group-name }
 
-    #| The size of font to use.
-    method font-size(--> Int) is rw {
-        self!property('font', 'font-size')
-    }
-
-    # The horizontal alignment of a cell.
-    method horizontal-align(--> HorizontalAlign) is rw {
-        self!property('alignment', 'horizontal-align')
-    }
-
-    # The vertical alignment of a cell.
-    method vertical-align(--> VerticalAlign) is rw {
-        self!property('alignment', 'vertical-align')
-    }
-
-    #| Whether text in the cell should be wrapped.
-    method wrap-text(--> Bool) is rw {
-        self!property('alignment', 'wrap-text')
-    }
-
-    #| The number format.
-    method number-format(--> Str) is rw {
-        self!property('format', 'number-format')
-    }
-
-    #| Produce a proxy for reading/writing the property.
-    method !property(Str $group, Str $key) is rw {
-        Proxy.new:
-                FETCH => -> | {
-                    %!changed{$key} // self!fetch($group, $key)
-                },
-                STORE => -> \p, $value {
-                    %!changed{$key} = self!check-type($group, $key, $value)
+        method SETUP-SELF is implementation-detail {
+            with $!group {
+                # Caching property types at run-time because $!prop can be a descendant of GroupType
+                for $!group.^attributes(:all) {
+                    %!group-types{ .name.substr(2) } := .type;
                 }
+
+                # For sequences we'd need to keep track of changed sequence items too.
+                $!pos-changes := $!group ~~ XMLSequence ?? Array[$!group.of].new !! Nil;
+            }
+        }
+
+        method !check-type($name, $prop, Mu \value) is raw {
+            unless value ~~ %!group-types{$name} {
+                die X::TypeCheck::Assignment.new:
+                    got => value,
+                    expected => %!group-types{$name},
+                    symbol => self.^name ~ "." ~ $prop;
+            }
+            value
+        }
+
+        method !prop(Str:D $prop) is rw {
+            my $name = %prop-alias{$group-name}{$prop} // $prop;
+            Proxy.new:
+                FETCH => -> | {
+                    %!changes{$name}:exists
+                        ?? %!changes{$name}
+                        !! ($!group andthen $!group."$name"() orelse Nil)
+                },
+                STORE => -> $, Mu \value {
+                    %!changes{$name} := self!check-type: $name, $prop, value;
+                }
+        }
+
+        method !sequential-only {
+            $!group ~~ XMLSequence
+                or die "Unable to use positional postcircumfix `[]` with " ~ self.^name;
+        }
+
+        method AT-POS(::?CLASS:D: Int:D $pos) {
+            self!sequential-only;
+            $!pos-changes[$pos]:exists
+                ?? $!pos-changes.AT-POS($pos)
+                !! $!group.AT-POS($pos)
+        }
+
+        method EXISTS-POS(::?CLASS:D: Int:D $pos) {
+            self!sequential-only;
+            $!pos-changes[$pos].EXISTS-POS($pos) || $!group.EXISTS-POS($pos)
+        }
+
+        method ASSIGN-POS(::?CLASS:D: Int:D $pos, \value) {
+            self!sequential-only;
+            $!pos-changes[$pos] = value
+        }
+
+        method !initial-push-append($method, \value) is raw {
+            # No new elements were added yet beyond what we have in $!prop.
+            # It wouldn't be wise to try to duplicate the work Array.push does. Then use a little trick, since
+            # the slot at the position of the last element in $!prop is not used anyway (or else $!pos-changes would be
+            # at least the length of $!prop).
+            my $last-pos = $!group.end;
+            $!pos-changes[$last-pos] = $!group[$last-pos]; # Make $!pos-changes the same length
+            LEAVE $!pos-changes[$last-pos]:delete; # Release the slot again
+            $!pos-changes."$method"(value)
+        }
+
+        method push(::?CLASS:D: \value) {
+            self!sequential-only;
+
+            $!pos-changes.elems < $!group.elems
+                ?? self!initial-push-append("push", value)
+                !! $!pos-changes.push(value)
+        }
+
+        method append(::?CLASS:D: \value) {
+            self!sequential-only;
+
+            $!pos-changes.elems < $!group.elems
+                ?? self!initial-push-append("appen", value)
+                !! $!pos-changes.append(value)
+        }
+
+        method reify(::?CLASS:D: --> GroupType) {
+            my $changed := Nil;
+            my $is-changed = %!changes || $!pos-changes;
+            with $!group {
+                # If group object is set and no changes has been made then nothing to be done. Otherwise we use
+                # changes hash as twiddles for clone and re-assign changed positionals.
+                return $_ unless $is-changed;
+                $changed := .clone: |%!changes;
+                if $_ ~~ XMLSequence {
+                    # Migrate only changed elements
+                    for ^$changed.elems -> $idx {
+                        $changed[$idx] = $!pos-changes[$idx] if $!pos-changes.EXISTS-POS($idx);
+                    }
+                }
+            }
+            elsif $is-changed {
+                die "Don't know how to produce an object of type " ~ GroupType.^name
+                    unless GroupType ~~ XMLRepresentation;
+                $changed := GroupType.new: |%!changes;
+                if $changed ~~ XMLSequence && $!pos-changes {
+                    for ^$!pos-changes.elems -> $idx {
+                        $changed.ASSIGN-POS($idx, $!pos-changes.AT-POS($idx)) if $!pos-changes.EXISTS-POS($idx);
+                    }
+                }
+            }
+            %!changes = ();
+            $!pos-changes = ();
+            $!group := $changed
+        }
+
+        proto method new-from(|)                 {*}
+        multi method new-from(Nil)               { self.new }
+        multi method new-from(GroupType:U $) { self.new }
+        multi method new-from(GroupType:D $group) { self.new(:$group) }
+
+        method PROP-CAN(Str:D $method-name) is implementation-detail {
+            (self andthen $!group orelse GroupType).^can($method-name)
+        }
+
+        # Allow an instance to be accessed as $indir-prop.property
+        ::?CLASS.^add_fallback(
+            -> \obj, $name {
+                obj.PROP-CAN(%prop-alias{obj.group-name}{$name} // $name)
+            },
+            -> \obj, $name {
+                my &meth = anon method (::?CLASS:D:) is rw {
+                    self!prop: $name
+                }
+                &meth.set_name($name);
+                ::?CLASS.^add_method($name, &meth);
+                &meth
+            });
+    }
+    my class IndirectProperty {
+
+        multi method new(XMLRepresentation:D $group) {
+            samewith :$group, |%_
+        }
+
+        submethod TWEAK {
+            self.SETUP-SELF;
+        }
+
+        method ^parameterize(\obj, \of, Str:D $group-name) is raw {
+            my \what := obj.^mixin(IndirectPropertyOf[of, $group-name]);
+            what.^set_name("CellStyle." ~ $group-name);
+            what
+        }
     }
 
-    method !fetch(Str $group, Str $key) {
-        with $!style-id {
-            die X::NYI.new(feature => 'Reading styles');
+    has Spreadsheet::XLSX::Root $.root;
+
+    #| The style ID, if we have one.
+    has Int $.style-id;
+
+    has IndirectProperty[Spreadsheet::XLSX::Styles::Format, "format"]           $.format
+        handles <use-alignment use-number-format use-font use-fill use-border>;
+
+    has IndirectProperty[Spreadsheet::XLSX::Types::Font, "font"]                $.font
+        handles <bold italic font-size font-name>;
+    has IndirectProperty[Spreadsheet::XLSX::Styles::Border, "border"]           $.border;
+    has IndirectProperty[Spreadsheet::XLSX::Styles::Fill, "fill"]               $.fill;
+    has IndirectProperty[Spreadsheet::XLSX::Styles::CellAlignment, "alignment"] $.alignment
+        handles <horizontal-align vertical-align wrap-text>;
+    has IndirectProperty[Spreadsheet::XLSX::Styles::NumberFormat, "numformat"]  $.numformat
+        handles<number-format>;
+
+    submethod TWEAK {
+        self!RESET(:full);
+    }
+
+    method !RESET(:$full) {
+        with $!root {
+            my $styles = $!root.styles;
+            if $full {
+                $!format = $!format.new-from: ($!style-id andthen $styles.cell-formats[$_] orelse Nil);
+            }
+            given $!format {
+                $!font      .= new-from: (.font-id          andthen $styles.fonts[$_]                orelse Nil);
+                $!border    .= new-from: (.border-id        andthen $styles.borders[$_]              orelse Nil);
+                $!fill      .= new-from: (.fill-id          andthen $styles.fills[$_]                orelse Nil);
+                $!alignment .= new-from: (.alignment                                                 orelse Nil);
+                $!numformat .= new-from: (.number-format-id andthen $styles.number-formats.by-id($_) orelse Nil);
+            }
         }
         else {
-            %properties{$group}{$key}.type
+            $!format    .= new;
+            $!font      .= new;
+            $!border    .= new;
+            $!fill      .= new;
+            $!alignment .= new;
+            $!numformat .= new;
         }
+        self
     }
 
-    method !check-type(Str $group, Str $key, $value) {
-        my $type = %properties{$group}{$key}.type;
-        unless $value ~~ $type {
-            die X::TypeCheck::Assignment.new:
-                    got => $value,
-                    expected => $type,
-                    symbol => $key;
-        }
-        $value
+    method set-id(Int:D $id) {
+        $!style-id = $id;
+        self!RESET(:full);
+    }
+
+    method set-format(Spreadsheet::XLSX::Styles::Format $format) {
+        $!style-id = Nil;
+        $!format .= new-from($format);
+        self!RESET;
+    }
+
+    method set-font(Spreadsheet::XLSX::Types::Font $font) {
+        $!style-id = Nil;
+        $!font .= new-from($font);
+        $.format.font-id = Nil;
+        self
+    }
+
+    method set-border(Spreadsheet::XLSX::Styles::Border $border) {
+        $!style-id = Nil;
+        $!border .= new-from($border);
+        $.format.border-id = Nil;
+        self
+    }
+
+    method set-fill(Spreadsheet::XLSX::Styles::Fill $fill) {
+        $!style-id = Nil;
+        $!fill .= new-from($fill);
+        $.format.fill-id = Nil;
+        self
+    }
+
+    method set-alignment(Spreadsheet::XLSX::Styles::CellAlignment $alignment) {
+        $!style-id = Nil;
+        $!alignment .= new-from($alignment);
+        $.format.alignment = Nil;
+        self
     }
 
     #| Takes any changes to the styles and obtains a style ID that
     #| describes them. If there are no changes, then any existing style
     #| ID that was assigned to this element will be used.
     method sync-style-id(Spreadsheet::XLSX::Styles $styles --> Int) {
-        if %!changed {
-            with $!style-id {
-                die X::NYI.new(feature => 'saving changes to existing styles');
-            }
-            my $font = self!build-group(Spreadsheet::XLSX::Styles::Font, 'font');
-            my $alignment = self!build-group(Spreadsheet::XLSX::Styles::CellAlignment, 'alignment');
-            my $number-format = %!changed<number-format> // Str;
-            my $style-id = $styles.obtain-style-id-for(:$font, :$alignment, :$number-format);
-            %!changed = ();
-            $style-id
-        }
-        else {
-            $!style-id
-        }
-    }
+        with $!format {
 
-    method !build-group(Mu $type, Str $group) {
-        my %props;
-        for %properties{$group}.kv -> $prop, Property $metadata {
-            with %!changed{$prop} {
-                %props{$metadata.attr-name // $prop} = $_;
-            }
+            # For a newly created number format we need to set a first id because it is required. It's safe because
+            # with :autogen `id-for` method candidate for number formats will generate and use a valid ID since we are
+            # unlikely to match that number format if it exists. And even if we accidentally would the only thing it
+            # means is that it is the actually requested format.
+            # Using 164 as it seems to be de-facto default for the first custom format ID.
+            $!numformat.id //= 164 if $!numformat.number-format;
+
+            .font-id          = ($!font.reify      andthen $styles.id-for($_, :autogen) orelse Nil);
+            .border-id        = ($!border.reify    andthen $styles.id-for($_, :autogen) orelse Nil);
+            .number-format-id = ($!numformat.reify andthen $styles.id-for($_, :autogen) orelse Nil);
+            .fill-id          = ($!fill.reify      andthen $styles.id-for($_, :autogen) orelse Nil);
+            .alignment        = ($!alignment.reify                                      orelse Nil);
+
+            $!style-id = $styles.id-for(.reify, $styles.cell-formats, :autogen);
+            self!RESET;
         }
-        return %props ?? $type.new(|%props) !! $type;
+        $!style-id;
     }
 }

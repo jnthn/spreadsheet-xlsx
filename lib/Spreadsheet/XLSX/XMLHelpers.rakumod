@@ -7,6 +7,7 @@ use LibXML::Document;
 use LibXML::Element;
 use LibXML::Namespace;
 use LibXML::Item :ast-to-xml;
+use LibXML::Text;
 
 role XMLSequence {...}
 
@@ -18,13 +19,36 @@ my role XMLNamed {
     has Str $.xml-name;
 
     method xml-set-name(Str:D $!xml-name) {}
+
+    proto method SET-PROP(Str:D, $) {*}
+    multi method SET-PROP('name', $!xml-name) {}
+    multi method SET-PROP(Str:D $prop, \prop-value) {
+        die "Cannot setup attribute's " ~ self.name ~ " $prop with " ~ prop-value.raku;
+    }
+
+    method SET-FROM-PROFILE(%profile) {
+        for %profile.kv -> $prop, \prop-val {
+            self.SET-PROP($prop, prop-val)
+        }
+    }
 }
 
 # For attributes mapping into XML element attributes
 my role XMLAttribute does XMLNamed { }
 
 # For attributes mapping into XML elements
-my role XMLElement does XMLNamed { }
+my role XMLElement does XMLNamed {
+    # XML attribute which holds simple tag value: <tag val="value"/>
+    has Str $.xml-val-attr;
+
+    method xml-set-val-attr(Str:D $!xml-val-attr) { }
+
+    multi method SET-PROP('val', Str:D $!xml-val-attr) { }
+    multi method SET-PROP('val', Bool:D $set) { $!xml-val-attr = 'val' if $set }
+}
+
+# Refinement for XMLElement attributes mapping into XML #text
+my role XMLTextElement does XMLElement { }
 
 # XMLRepresentation implements object de- and serialization to/from XML. This is done by mapping class attributes
 # into XML attributes or elements. A type object consuming this role would be mapping into an XML element. If optional
@@ -47,86 +71,115 @@ my role XMLElement does XMLNamed { }
 #
 # Special care is taken of unsupported XML elements or attributes when a source is de-serialized. Some of them are not
 # supported yet, or are not part of the Open XML File specification. These are converted into LibXML AST (`$node.ast`)
-# and pushed into object's `@!xml-unsupported` attribute. These are then de-serialized back into XML thus preserving
+# and pushed into object's `$!xml-unsupported` attribute. These are then de-serialized back into XML thus preserving
 # (presumably) compatibility with the original file format. Namespaces are handled individually as we don't have direct
-# use or mapping for them. Thus all namespaces from an element eventually end up in `@!xml-unsupported`.
+# use or mapping for them. Thus all namespaces from an element eventually end up in `$!xml-unsupported`.
 #
 # The role also provides specific support for XML elements declared in schema as xsd:sequence. If a class consumes
 # the XMLSequence role (not every sequential element is actually a sequence, consider optional child elements) then
-# serialization/deserialization also invokes corresponding private methods from XMLSequence. Also, elements not having
-# direct mapping into attributes but known to be items of the sequence are not pushed into @!xml-unsupported in hope
+# serialization also invokes the `!set-element-from-sequence` method of XMLSequence. Also, elements not having
+# direct mapping into attributes but known to be items of the sequence are not pushed into $!xml-unsupported in hope
 # they'd be picked up later.
 role XMLRepresentation[Str $element-tag?] is export {
-    has @!xml-unsupported is built;
+    has $!xml-unsupported is built;
 
     method default-xml-tag is pure {
         $element-tag
     }
 
-    method !profile-from-xml-element(LibXML::Element:D $elem, Bool :$local = True) {
-        gather {
-            # ASTs for attributes or elements we cannot map into class attributes
-            my @unsupported;
+    method profile-from-xml-element(LibXML::Element:D $elem, %profile, Bool :$local = True) {
+        # If there are any parents let them do their job first.
+        my %p = $_ with callsame;
 
-            my sub coerce-into(::T, T() \coerced) is raw {
-                coerced
-            }
+        # ASTs for attributes or elements we cannot map into class attributes
+        my $unsupported := (%p<xml-unsupported> //= []);
 
-            my sub take-xml-value(Mu \type, Str:D $xml-value) {
-                type ~~ Bool
-                    ?? ?($xml-value eq "1" | "true")
-                    !! coerce-into(type, $xml-value)
-            }
-
-            my proto sub by-attr-type(Any:U, LibXML::Element:D) {*}
-            multi sub by-attr-type(::?ROLE \xml-elem, $property) {
-                # A XMLRepresentation has 'from-xml-element' method
-                xml-elem.from-xml-element($property)
-            }
-            multi sub by-attr-type(\xml-plain, $property) {
-                $property.hasAttribute('val')
-                    ?? take-xml-value(xml-plain, $property.getAttribute('val'))
-                    !! xml-plain ~~ Bool
-                ?? True # A boolean element with no attributes: <boolProp/>
-                !! die X::Spreadsheet::XLSX::Format.new:
-                    message => "Simple property element {$property.name} is missing required attribute 'val'"
-            }
-
-
-            # We don't consider namespaces as data but better preserve them
-            for $elem.namespaces -> LibXML::Namespace:D $ns {
-                @unsupported.push: $ns.ast;
-            }
-
-            for $elem.properties -> LibXML::Attr:D $xml-attr {
-                with self.^xml-attr-for-attr($xml-attr.name) -> $attr {
-                    take $attr.name.substr(2) => take-xml-value($attr.type, $xml-attr.value);
-                }
-                else {
-                    @unsupported.push: $xml-attr.ast;
-                }
-            }
-
-            my $is-sequential = self.^xml-is-sequential;
-            my $seq-tags := self.^xml-sequence-tags.keys.Set;
-
-            for $elem.childNodes -> LibXML::Element:D $xml-elem {
-                my $elem-name = $xml-elem.nodeName;
-                with self.^xml-attr-for-tag($elem-name) -> $attr {
-                    take ($attr.name.substr(2) => by-attr-type(nominalize-type($attr.type), $xml-elem));
-                }
-                elsif !($is-sequential && $elem-name ∈ $seq-tags) {
-                    @unsupported.push: $xml-elem.ast;
-                }
-            }
-
-            take "xml-unsupported" => @unsupported if @unsupported;
+        my sub coerce-into(::T, T() \coerced) is raw {
+            coerced
         }
+
+        my sub take-xml-value(Mu \type, Str:D $xml-value) {
+            type ~~ Bool
+                ?? ?($xml-value eq "1" | "true")
+                !! coerce-into(type, $xml-value)
+        }
+
+        my sub bad-property($property, $explanation) {
+            die X::Spreadsheet::XLSX::Format.new:
+                message => "Simple property element '" ~ $property.name ~ "' " ~ $explanation
+        }
+
+        my proto sub by-dest-type(Any:U, LibXML::Element:D, *%) {*}
+        multi sub by-dest-type(::?ROLE \xml-elem, $property, *%) {
+            # A XMLRepresentation has 'from-xml-element' method
+            xml-elem.from-xml-element($property, |%profile)
+        }
+        multi sub by-dest-type(\xml-simple, LibXML::Text:D $property, :$attr) {
+            unless $attr ~~ XMLTextElement {
+                bad-property $property, "cannot be mapped into a no 'xml-text' attribute " ~ $attr.name
+            }
+            take-xml-value(xml-simple, $property.textContent)
+        }
+        multi sub by-dest-type(\xml-simple, LibXML::Element:D $property, :$attr) {
+            # Non-XMLRepresentation types are pulled from either:
+            # <xml-attr $xml-val-attr="value"/> or <xml-attr>value</xml-attr>
+
+            my Str $xml-val-attr = $attr.xml-val-attr;
+
+            # If $xml-val-attr is set then we expect the value to be held by XML attribute it specifies.
+            $xml-val-attr
+                ?? ($property.hasAttribute($xml-val-attr)
+                    ?? take-xml-value(xml-simple, $property.getAttribute($xml-val-attr))
+                    !! (xml-simple ~~ Bool
+                        ?? True # A boolean element with no attributes: <boolProp/>
+                        !! bad-property($property, "doesn't have required attribute '$xml-val-attr'")))
+                !! $property.hasChildNodes
+                    ?? ($property.elems == 1 && $property.first ~~ LibXML::Text
+                        ?? take-xml-value(xml-simple, $property.textContent)
+                        !! bad-property($property, "can only contain plain text"))
+                    !! bad-property($property, "doesn't have a value")
+        }
+        multi sub by-dest-type($, $property) {
+            die X::Spreadsheet::XLSX::Format.new:
+                message => "An object of type " ~ $property.^name ~ " cannot be used as an XML property"
+        }
+
+
+        # We don't consider namespaces as data but better preserve them
+        for $elem.namespaces -> LibXML::Namespace:D $ns {
+            $unsupported.push: $ns.ast;
+        }
+
+        for $elem.properties -> LibXML::Attr:D $xml-attr {
+            with self.^xml-attr-for-attr($xml-attr.name) -> $attr {
+                %p{ $attr.name.substr(2) } = take-xml-value($attr.type, $xml-attr.value);
+            }
+            else {
+                $unsupported.push: $xml-attr.ast;
+            }
+        }
+
+        my $is-sequential = self.^xml-is-sequential;
+        my $seq-tags := self.^xml-sequence-tags.keys.Set;
+
+        for $elem.childNodes -> LibXML::Node:D $xml-node {
+            my $tag = $xml-node.nodeName;
+            with self.^xml-attr-for-tag($tag) -> $attr {
+                %p{ $attr.name.substr(2) } = by-dest-type(nominalize-type($attr.type), $xml-node, :$attr);
+            }
+            elsif !($is-sequential && $tag ∈ $seq-tags) {
+                $unsupported.push: $xml-node.ast;
+            }
+        }
+
+        %p
     }
 
-    method !set-element-from-self(::?CLASS:D: LibXML::Document:D $doc, LibXML::Element:D $elem) {
-        for @!xml-unsupported -> $ast {
-            given ast-to-xml($ast) {
+    method set-element-from-self(::?CLASS:D: LibXML::Document:D $doc, LibXML::Element:D $elem) {
+        callsame;
+
+        $!xml-unsupported andthen .map: -> $ast {
+            given LibXML::Item.ast-to-xml($ast) {
                 when LibXML::Attr {
                     if .name eq 'xmlns' {
                         # Workaround for a problem where LibXML deserializes :xmlns(...) as an attribute
@@ -145,21 +198,19 @@ role XMLRepresentation[Str $element-tag?] is export {
             }
         }
 
+        my sub to-xml-value($attr-value) {
+            $attr-value.HOW ~~ Metamodel::EnumHOW
+                ?? ~$attr-value.value
+                !! $attr-value ~~ Bool
+                    ?? ~$attr-value.Int
+                    !! ~$attr-value
+        }
+
         for self.^attributes(:local).grep(XMLAttribute) -> Attribute:D $attr {
             my $xml-attr-name = $attr.xml-name;
 
             with $attr.get_value(self) -> $attr-value {
-                my Str $xml-value;
-                if $attr-value.HOW ~~ Metamodel::EnumHOW {
-                    $xml-value = ~$attr-value.value;
-                }
-                elsif $attr-value ~~ Bool {
-                    $xml-value = ~$attr-value.Int;
-                }
-                else {
-                    $xml-value = ~$attr-value;
-                }
-                $elem.add: $doc.createAttribute($xml-attr-name, $xml-value);
+                $elem.add: $doc.createAttribute($xml-attr-name, to-xml-value($attr-value));
             }
         }
 
@@ -168,18 +219,20 @@ role XMLRepresentation[Str $element-tag?] is export {
                 if $attr-value.^can('to-xml-element') {
                     $elem.add: $attr-value.to-xml-element($doc, :tag($attr.xml-name));
                 }
+                elsif $attr.xml-val-attr -> $xml-val-attr {
+                    # Simple element with value in an attribute; omit if a false boolean
+                    my $attr-is-bool = $attr.type ~~ Bool;
+                    unless $attr-is-bool && !$attr-value {
+                        my $attr-elem = $doc.createElement($attr.xml-name);
+                        # For a boolean type it is sufficient to have the element alone for a true value
+                        $attr-elem.setAttribute($xml-val-attr, to-xml-value($attr-value)) unless $attr-is-bool;
+                        $elem.add: $attr-elem;
+                    }
+                }
                 else {
-                    # Simple element with 'val' attribute
+                    # Simple element with value in #text
                     my $attr-elem = $doc.createElement($attr.xml-name);
-                    if $attr-value.HOW ~~ Metamodel::EnumHOW {
-                        $attr-elem.setAttribute('val', ~$attr-value.value);
-                    }
-                    elsif $attr-value ~~ Bool {
-                        $attr-elem.setAttribute('val', "0") unless $attr-value;
-                    }
-                    else {
-                        $attr-elem.setAttribute('val', ~$attr-value);
-                    }
+                    $attr-elem.appendText(to-xml-value($attr-value));
                     $elem.add: $attr-elem;
                 }
             }
@@ -188,11 +241,11 @@ role XMLRepresentation[Str $element-tag?] is export {
     }
 
     #| Produce an instance from XML element
-    method from-xml-element(LibXML::Element:D $elem --> ::?CLASS:D) {
+    method from-xml-element(LibXML::Element:D $elem, :%profile --> ::?CLASS:D) {
         # The method can be accidentally invoked on a nominalizable like a definite. Disrespect and proceed as normal.
-        my $profile := self!profile-from-xml-element($elem).Capture;
-        given self.new(|$profile) {
-            $_!pull-from-sequence($elem) if .^xml-is-sequential;
+        my %p = self.profile-from-xml-element($elem, %profile);
+        given self.new(|%p, |%profile) {
+            .?fixup-from-element($elem, :%profile);
             $_
         }
     }
@@ -200,7 +253,10 @@ role XMLRepresentation[Str $element-tag?] is export {
     #| Serialize into a LibXML::Element
     method to-xml-element(::?CLASS:D: LibXML::Document:D $doc, LibXML::Element $elem?, Str :$tag ) {
         given $elem // $doc.createElement($tag // $element-tag) {
-            self!set-element-from-self($doc, $_);
+            # With 6.e this would better be done using submethods and WALK over classes and roles. This way there would
+            # be no need for individual support for specific roles and no risk of conflicting method method names
+            # requiring resolution by consuming class. But for now let's hook in sequences...
+            self.set-element-from-self($doc, $_);
             self!set-element-from-sequence($doc, $_) if self.^xml-is-sequential;
             $_
         }
@@ -225,21 +281,53 @@ role XMLRepresentation[Str $element-tag?] is export {
 # Also, it is typical for sequential XML elements to have attribute `count`. Role `XMLCounting` provides support for it.
 # `XMLCounting` provides validation method `validate-count` which we try invoke after completing deserialization of a
 # sequence.
-role XMLSequence is export
-{
-    method !pull-from-sequence(::?CLASS:D: LibXML::Element:D $seq) {
-        my %tags = self.^xml-sequence-tags;
-        my Junction:D $any-of-seq = %tags.keys.any;
-        for $seq.children.grep({ .nodeName eq $any-of-seq }) -> LibXML::Element:D $seq-elem {
-            self.push: do given %tags{$seq-elem.nodeName} {
-                # If current element maps into a role let the class itself resolve it into something concrete
-                .^archetypes.parametric
-                    ?? self.resolve-xml-element($seq-elem)
-                    !! .from-xml-element($seq-elem)
-            }
+role XMLSequence[::ItemType] does Positional does Iterable is export {
+    has LibXML::Element $!backing;
+    # Map of our index into the children of $!backing
+    has List $!elem-index = ();
+    # Storage of items produced from XML elements.
+    has ItemType @!items handles <ASSIGN-POS push append>;
+    # Remember the profile we was created with and use it for resolving child XML elements.
+    has %!profile;
+
+    multi method new(*@items, *%profile) {
+        given self.bless(|%profile) {
+            .append: @items;
+            $_
         }
+    }
+
+    method of { ItemType }
+
+    method !pull-from-sequence(::?CLASS:D: LibXML::Element:D $seq, %profile?) {
+        $!backing := $seq;
+        %!profile = %profile;
+        my Junction:D $any-of-seq = self.^xml-sequence-tags.keys.any;
+
+        # Build an index into $!backing.
+        $!elem-index := $seq.children.kv.map(
+            -> $orig-idx, $child {
+                next unless $child.nodeName ~~ $any-of-seq;
+                $orig-idx
+            }).List;
+
         self.?validate-count($seq);
         self
+    }
+
+    # Lazily resolve an index into XML element representation
+    method !item-at-pos(Int:D $idx) {
+        return @!items[$idx] if @!items[$idx]:exists;
+        return fail "Index $idx is out of range for " ~ self.^name if $idx > $!elem-index.end;
+
+        my $elem = $!backing[$!elem-index[$idx]];
+
+        given self.^xml-sequence-tags.{$elem.nodeName} {
+            # If the element maps into a role then let the class itself resolve it into something concrete.
+            @!items[$idx] = .^archetypes.parametric
+                ?? self.resolve-xml-element($elem, :%!profile)
+                !! .from-xml-element($elem, :%!profile)
+        }
     }
 
     method !set-element-from-sequence(::?CLASS:D: LibXML::Document:D $doc, LibXML::Element:D $elem) {
@@ -247,25 +335,61 @@ role XMLSequence is export
 
         my %types{Mu} = %tags.antipairs;
 
-        for self -> $item {
-            my %profile;
-            with %types{$item.WHAT} {
-                %profile<tag> = $_;
+        for ^self.elems -> $idx {
+            if @!items[$idx]:exists {
+                my $item = @!items[$idx];
+                my %profile;
+                with %types{$item.WHAT} {
+                    %profile<tag> = $_;
+                }
+                else {
+                    # If there is no mapping for this item type then it was likely produced by resolving a role (see Fill
+                    # for class Fills). Use either backward resolution or let the item itself decide what to do.
+                    %profile<tag> = $_ with self.?resolve-item-tag($item);
+                }
+                $elem.add($item.to-xml-element($doc, |%profile));
             }
             else {
-                # If there is no mapping for this item type then it was likely produced by resolving a role (see Fill
-                # for class Fills). Use either backward resolution or let the item itself decide what to do.
-                %profile<tag> = $_ with self.?resolve-item-tag($item);
+                # If an XML element hasn't been resolved yet then create a fresh copy of it from the original element.
+                $elem.add($!backing[$!elem-index[$idx]].clone(:deep));
             }
-            $elem.add($item.to-xml-element($doc, |%profile));
         }
 
         self
     }
 
-    # Array constructor doesn't respect BUILDPLAN but we may need it.
-    method new(*%named, |) {
-        callsame().BUILDALL(Empty, %named)
+    method fixup-from-element(::?CLASS:D: LibXML::Element:D $elem, :%profile) {
+        callsame();
+        self!pull-from-sequence($elem, %profile)
+    }
+
+    method AT-POS(::?CLASS:D: Int:D $pos) is raw {
+        self!item-at-pos($pos)
+    }
+
+    # An element exists either if we can reify it from existing XML element or if a new one has been pushed/appended.
+    method EXISTS-POS(::?CLASS:D: Int:D $pos) {
+        $pos < $!elem-index.elems || @!items[$pos].EXISTS-POS($pos)
+    }
+
+    method elems(::?CLASS:D:) {
+        $!elem-index.elems max @!items.elems
+    }
+
+    method end(::?CLASS:D:) {
+        $!elem-index.end max @!items.end
+    }
+
+    method iterator(::?CLASS:D:) {
+        class :: does Iterator {
+            has $.idx = 0;
+            has $.seq;
+
+            method pull-one {
+                return IterationEnd if $!idx > $.seq.end;
+                $.seq.AT-POS($!idx++)
+            }
+        }.new(:seq(self))
     }
 }
 
@@ -302,6 +426,13 @@ my role XMLElementHOW {
     method xml-sequence-tags(Mu) is raw { $!sequence-tags }
 }
 
+my role XMLElementRoleHOW {
+    method specialize(Mu, Mu \target-class, |) {
+        target-class.HOW does XMLElementHOW unless target-class.HOW ~~ XMLElementHOW;
+        nextsame;
+    }
+}
+
 # Produce standard XML name for an attribute object. The rules used are following:
 # If attribute type is an XMLRepresentation and its default tag is specified then use it;
 # otherwise use attribute name either as-is, or if it's a kebab case then convert into lower camel case:
@@ -316,10 +447,21 @@ my sub xml-name(Attribute:D $attr) {
                 !! $aname)
 }
 
-my sub mark-attr-xml($attr, $name, Mu \xml-role) {
+my sub mark-attr-xml($attr, Mu \xml-role, *%profile) {
+    return if $attr ~~ xml-role;
+
     my $pkg-how := $*PACKAGE.HOW;
-    $pkg-how does XMLElementHOW unless $pkg-how ~~ XMLElementHOW;
-    ($attr does xml-role).xml-set-name($name);
+    if $pkg-how ~~ Metamodel::ClassHOW {
+        $pkg-how does XMLElementHOW unless $pkg-how ~~ XMLElementHOW;
+    }
+    elsif $pkg-how ~~ Metamodel::ParametricRoleHOW {
+        $pkg-how does XMLElementRoleHOW unless $pkg-how ~~ XMLElementRoleHOW;
+    }
+    else {
+        die "Cannot use any of `xml-attr` or `xml-elem` traits with a " ~ $pkg-how.^name ~ "-backed typeobject";
+    }
+
+    $attr.^mixin(xml-role).SET-FROM-PROFILE(%profile)
 }
 
 # `xml-attr` trait marks an attribute as mapping into an XML attribute. I.e.
@@ -327,26 +469,28 @@ my sub mark-attr-xml($attr, $name, Mu \xml-role) {
 # `is xml-attr<attrName>` sets explicit XML attribute name, overriding possible attribute's type provided (if the type
 # is an XMLRepresentation), or implicit name produced by xml-name routine above.
 multi sub trait_mod:<is>(Attribute:D $attr, Str:D :$xml-attr!) is export {
-    unless $attr ~~ XMLAttribute {
-        mark-attr-xml($attr, $xml-attr, XMLAttribute);
-    }
+    mark-attr-xml($attr, XMLAttribute, name => $xml-attr);
 }
 multi sub trait_mod:<is>(Attribute:D $attr, Bool:D :$xml-attr!) is export {
-    unless $attr ~~ XMLAttribute {
-        mark-attr-xml($attr, xml-name($attr), XMLAttribute);
-    }
+    mark-attr-xml($attr, XMLAttribute, name => xml-name($attr));
 }
 
 # `xml-elem` trait marks an attribute as mapping into an XML element. Usage is similar to `xml-attr`.
 multi sub trait_mod:<is>(Attribute:D $attr, Str:D :$xml-elem!) is export {
-    unless $attr ~~ XMLElement {
-        mark-attr-xml($attr, $xml-elem, XMLElement);
-    }
+    mark-attr-xml($attr, XMLElement, name => $xml-elem);
 }
 multi sub trait_mod:<is>(Attribute:D $attr, Bool:D :xml-elem($)!) is export {
-    unless $attr ~~ XMLElement {
-        mark-attr-xml($attr, xml-name($attr), XMLElement);
-    }
+    mark-attr-xml($attr, XMLElement, name => xml-name($attr) );
+}
+multi sub trait_mod:<is>(Attribute:D $attr, Pair:D :$xml-elem!) is export {
+    mark-attr-xml($attr, XMLElement, name => xml-name($attr), |$xml-elem);
+}
+multi sub trait_mod:<is>(Attribute:D $attr, :$xml-elem! (Str $name?, *%profile)) {
+    mark-attr-xml($attr, XMLElement, name => ($name // xml-name($attr)), |%profile);
+}
+
+multi sub trait_mod:<is>(Attribute:D $attr, Bool:D :xml-text($)!) is export {
+    mark-attr-xml($attr, XMLTextElement, :name<#text>);
 }
 
 # `xml-sequence` trait marks a class as (de)serializing from/into an XML sequence element. Usage:
@@ -385,9 +529,9 @@ multi sub trait_mod:<is>(Mu \type, :$xml-sequence! (Str:D $tag?, |child-types)) 
         will complain{ "xml-sequence expects a role or a XMLRepresentation type object but got " ~ $_.gist }
         where { .^archetypes.parametric || (!.defined && $_ ~~ XMLRepresentation ) };
 
-    for child-types.kv -> $child-tag, XMLReprType \child-type {
-        @types.push: child-type;
-        %tags{ $child-tag ~~ Int:D ?? child-type.default-xml-tag !! $child-tag } := child-type;
+    for child-types.pairs -> (:key($child-tag), XMLReprType :value($child-type) is raw) {
+        @types.push: $child-type;
+        %tags{ $child-tag ~~ Int:D ?? $child-type.default-xml-tag !! $child-tag } := $child-type;
     }
 
     my @type-names = @types.map(*.^name);
@@ -406,10 +550,10 @@ multi sub trait_mod:<is>(Mu \type, :$xml-sequence! (Str:D $tag?, |child-types)) 
                       { "expected any of " ~ @type-names.join(",") ~ " but got " ~ .^name ~ " ($_)" });
 
     # Finalize the target class
-    type.^add_parent(Array[XMLChildTypes]);
+#    type.^add_parent(Array[XMLChildTypes]);
     type.HOW does XMLElementHOW;
     type.^xml-set-sequence-tags(%tags);
-    type.^add_role(XMLSequence);
+    type.^add_role(XMLSequence[XMLChildTypes]);
     type.^add_role(XMLRepresentation[$tag]);
 }
 
