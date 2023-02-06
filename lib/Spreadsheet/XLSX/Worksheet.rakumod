@@ -41,37 +41,79 @@ class Spreadsheet::XLSX::Worksheet {
 
         submethod TWEAK(LibXML::Element :$!backing --> Nil) {}
 
-        multi method AT-POS(Int $row, Int $col) is raw {
-            my @row := (@!rows[$row] //= Array[Spreadsheet::XLSX::Cell].new);
-            my $cell := @row[$col];
-            $cell //= self!maybe-load-from-backing($row, $col);
-            $cell
+        # Split a cell reference "A42" into 42 and "A"
+        my sub parse-ref(Str:D $ref) {
+            if $ref ~~ /^ $<colref>=<[A..Z]>+ $<row>=\d+ $/ -> $m {
+                return ($m<row>.Int, ~$<colref>)
+            }
+            die "Invalid cell reference '$ref'"
+        }
+        # Convert column ref from "A", "AA", "AAZ", etc. into 0-based index
+        my sub idx-from-colref(Str:D $colref) {
+            my @chars = $colref.comb;
+            die "Invalid column reference '$colref'" unless "A" le @chars.all le "Z";
+            @chars.map(*.ord - 65).cache andthen (|.head(*-1).map(* + 1), .tail).reduce({ $^a *26 + $^b })
+        }
+        # Convert an index into column reference
+        my sub colref-from-idx(Int:D $col) {
+            ($col ?? $col.polymod(26 xx *) !! 0).reverse.cache
+                andthen (|.head(*-1).map(*+1), .tail).map({ ($_ + 65).chr }).join
         }
 
-        multi method ASSIGN-POS(Int $row, Int $col, Spreadsheet::XLSX::Cell $value) {
+        multi method AT-POS(::?CLASS:D: Int $row, Int $col --> Spreadsheet::XLSX::Cell) is raw {
+            # Convert column number into Excel's A..Z, AA..ZZ, AAA...ZZZ column reference.
+            self!maybe-load-from-backing($row + 1, colref-from-idx($col));
+        }
+
+        multi method AT-POS(::?CLASS:D: Int:D $row, Str:D $colref) {
+            self!maybe-load-from-backing($row + 1, $colref)
+        }
+
+        multi method AT-POS(::?CLASS:D: Str:D $ref) is raw {
+            self!maybe-load-from-backing: |parse-ref($ref)
+        }
+
+        multi method ASSIGN-POS(::?CLASS:D: Int $row, Int $col, Spreadsheet::XLSX::Cell $value) {
             my @row := (@!rows[$row] //= Array[Spreadsheet::XLSX::Cell].new);
             @row[$col] = $value
         }
 
-        method max-row {
-            self!load-backing-rows;
-            @!backing-rows.elems - 1
+        multi method ASSIGN-POS(::?CLASS:D: Int:D $row, Str:D $colref, Spreadsheet::XLSX::Cell $value) {
+            samewith $row - 1, idx-from-colref($colref), $value
+        }
+        multi method ASSIGN-POS(::?CLASS:D: Str:D $ref, Spreadsheet::XLSX::Cell $value) {
+            my ($row, $col) = parse-ref($ref);
+            samewith $row - 1, $col, $value
         }
 
-        method !maybe-load-from-backing(Int $row, Int $col) {
-            with self!lookup-backing-row($row) -> LibXML::Element $backing-row {
-                my ($from, $to) = get-attribute($backing-row, "spans").split(':');
-                if $from <= $col + 1 <= $to {
-                    my $cell-ref = (65 + $col - ($from - 1)).chr ~ ($row + 1);
+        multi method EXISTS-POS(::?CLASS:D: Int:D $row, Int:D $col) {
+            samewith colref-from-idx($col) ~ ($row + 1)
+        }
+        multi method EXISTS-POS(::?CLASS:D: Int:D $row, Str:D $colref) {
+            samewith $colref ~ $row
+        }
+        multi method EXISTS-POS(::?CLASS:D: Str:D $ref) {
+            $!backing.exists(q«.//*[local-name() = 'c' and namespace-uri() = '»
+                ~ $!backing.namespaceURI ~ q«' and @r = '» ~ $ref ~ q«']» )
+        }
+
+        method max-row {
+            self!load-backing-rows;
+            @!backing-rows.end
+        }
+
+        # $row is 1-based here because we use stringy $colref. I.e., it's a reflection of "A1" refrerence notation.
+        method !maybe-load-from-backing(Int $row, Str:D $colref) {
+            with self!lookup-backing-row($row - 1) -> LibXML::Element $backing-row {
+                    my $cellref = $colref ~ $row;
                     # This could be a sparse row with missing columns. The only reliable approach is to search by
                     # `A1`-style reference.
                     my LibXML::Element $doc-col =
                         $backing-row.findnodes(q«./*[local-name() = 'c' and namespace-uri() = '»
-                            ~ $backing-row.namespaceURI ~ q«' and @r = '» ~ $cell-ref ~ q«']» ).first;
+                            ~ $backing-row.namespaceURI ~ q«' and @r = '» ~ $cellref ~ q«']» ).first;
                     if $doc-col && $doc-col.nodeName eq 'c' {
                         return cell-from-xml($doc-col, $!worksheet.root);
                     }
-                }
             }
             return Spreadsheet::XLSX::Cell;
         }
