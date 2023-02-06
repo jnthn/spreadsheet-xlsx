@@ -119,7 +119,7 @@ class Spreadsheet::XLSX::Cell::Text does Spreadsheet::XLSX::Cell {
                 }
                 when CTSharedStr {
                     with $!v {
-                        $!value = $!root.shared-strings[+$_].t;
+                        $!value = $!root.shared-strings[+$_].value;
                     }
                     else {
                         die X::Spreadsheet::XLSX::Format.new:

@@ -95,5 +95,7 @@ class CT_Rst is xml-sequence(<is>, :rPh(CT_PhoneticRun), :r(CT_RElt)) is export 
     has CT_PhoneticPr $.phonetic-properties is xml-elem<phoneticPr>;
 
     # A convenience user-facing method.
-    method value { $!t }
+    method value {
+        $!t // self.grep(CT_RElt).map(*.t).join
+    }
 }
