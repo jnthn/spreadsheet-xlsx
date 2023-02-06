@@ -165,7 +165,15 @@ role XMLRepresentation[Str $element-tag?] is export {
         for $elem.childNodes -> LibXML::Node:D $xml-node {
             my $tag = $xml-node.nodeName;
             with self.^xml-attr-for-tag($tag) -> $attr {
-                %p{ $attr.name.substr(2) } = by-dest-type(nominalize-type($attr.type), $xml-node, :$attr);
+                my \obj = by-dest-type(nominalize-type($attr.type), $xml-node, :$attr);
+                my $pkey = $attr.name.substr(2);
+                if $attr.name.starts-with('@') {
+                    %p{ $pkey } := [] unless %p{ $pkey }:exists;
+                    %p{ $pkey }.push: obj;
+                }
+                else {
+                    %p{ $pkey } = obj;
+                }
             }
             elsif !($is-sequential && $tag ∈ $seq-tags) {
                 $unsupported.push: $xml-node.ast;
