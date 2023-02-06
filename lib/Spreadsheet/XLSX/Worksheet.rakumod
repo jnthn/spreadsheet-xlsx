@@ -40,14 +40,6 @@ class Spreadsheet::XLSX::Worksheet {
         has Array[Spreadsheet::XLSX::Cell] @!rows;
 
         submethod TWEAK(LibXML::Element :$!backing --> Nil) {}
-
-        # Split a cell reference "A42" into 42 and "A"
-        my sub parse-ref(Str:D $ref) {
-            if $ref ~~ /^ $<colref>=<[A..Z]>+ $<row>=\d+ $/ -> $m {
-                return ($m<row>.Int, ~$<colref>)
-            }
-            die "Invalid cell reference '$ref'"
-        }
         # Convert column ref from "A", "AA", "AAZ", etc. into 0-based index
         my sub idx-from-colref(Str:D $colref) {
             my @chars = $colref.comb;
@@ -59,6 +51,15 @@ class Spreadsheet::XLSX::Worksheet {
             ($col ?? $col.polymod(26 xx *) !! 0).reverse.cache
                 andthen (|.head(*-1).map(*+1), .tail).map({ ($_ + 65).chr }).join
         }
+        # Split a cell reference "A42" into 42 and "A"
+        my sub parse-ref(Str:D $ref, Bool :$as-int) {
+            if $ref ~~ /^ $<colref>=<[A..Z]>+ $<row>=\d+ $/ -> $m {
+                return $as-int
+                ?? ($m<row> - 1, idx-from-colref(~$m<colref>))
+                !! ($m<row>.Int, ~$<colref>)
+            }
+            die "Invalid cell reference '$ref'"
+        }
 
         multi method AT-POS(::?CLASS:D: Int $row, Int $col --> Spreadsheet::XLSX::Cell) is raw {
             # Convert column number into Excel's A..Z, AA..ZZ, AAA...ZZZ column reference.
@@ -66,7 +67,7 @@ class Spreadsheet::XLSX::Worksheet {
         }
 
         multi method AT-POS(::?CLASS:D: Int:D $row, Str:D $colref) {
-            self!maybe-load-from-backing($row + 1, $colref)
+            self!maybe-load-from-backing($row, $colref)
         }
 
         multi method AT-POS(::?CLASS:D: Str:D $ref) is raw {
@@ -82,19 +83,21 @@ class Spreadsheet::XLSX::Worksheet {
             samewith $row - 1, idx-from-colref($colref), $value
         }
         multi method ASSIGN-POS(::?CLASS:D: Str:D $ref, Spreadsheet::XLSX::Cell $value) {
-            my ($row, $col) = parse-ref($ref);
-            samewith $row - 1, $col, $value
+            samewith |parse-ref($ref, :as-int), $value
         }
 
         multi method EXISTS-POS(::?CLASS:D: Int:D $row, Int:D $col) {
-            samewith colref-from-idx($col) ~ ($row + 1)
+            self!exists-locally($row, $col)
+                || samewith(colref-from-idx($col) ~ ($row + 1))
         }
         multi method EXISTS-POS(::?CLASS:D: Int:D $row, Str:D $colref) {
-            samewith $colref ~ $row
+            self!exists-locally($row - 1, idx-from-colref($colref))
+                || samewith $colref ~ $row
         }
         multi method EXISTS-POS(::?CLASS:D: Str:D $ref) {
-            $!backing.exists(q«.//*[local-name() = 'c' and namespace-uri() = '»
-                ~ $!backing.namespaceURI ~ q«' and @r = '» ~ $ref ~ q«']» )
+            self!exists-locally( |parse-ref($ref, :as-int) )
+                || ( $!backing andthen .exists( q«.//*[local-name() = 'c' and namespace-uri() = '»
+                    ~ $!backing.namespaceURI ~ q«' and @r = '» ~ $ref ~ q«']» ))
         }
 
         method max-row {
@@ -102,8 +105,15 @@ class Spreadsheet::XLSX::Worksheet {
             @!backing-rows.end
         }
 
+        # Be careful and don't auto-vivify rows by accident!
+        method !exists-locally(Int:D $row, Int:D $col) {
+            @!rows[$row]:exists && @!rows[$row].EXISTS-POS($col)
+        }
+
         # $row is 1-based here because we use stringy $colref. I.e., it's a reflection of "A1" refrerence notation.
         method !maybe-load-from-backing(Int $row, Str:D $colref) {
+            return $_ with @!rows[$row - 1][idx-from-colref($colref)];
+
             with self!lookup-backing-row($row - 1) -> LibXML::Element $backing-row {
                     my $cellref = $colref ~ $row;
                     # This could be a sparse row with missing columns. The only reliable approach is to search by
@@ -115,6 +125,7 @@ class Spreadsheet::XLSX::Worksheet {
                         return cell-from-xml($doc-col, $!worksheet.root);
                     }
             }
+
             return Spreadsheet::XLSX::Cell;
         }
 

@@ -178,7 +178,7 @@ class Spreadsheet::XLSX::Cell::Empty does Spreadsheet::XLSX::Cell {
 #| Cell object from it.
 sub cell-from-xml(LibXML::Element $element, Spreadsheet::XLSX::Root:D $root) is export {
 
-    return Spreadsheet::XLSX::Cell::Empty.from-xml-element($element, :$root) unless $element.hasChildNodes;
+    return Spreadsheet::XLSX::Cell::Empty.from-xml-element($element, :profile{ :$root }) unless $element.hasChildNodes;
 
     my LibXML::Attr $type-node = $element.getAttributeNode('t');
     given $type-node ?? $type-node.string-value !! '' {

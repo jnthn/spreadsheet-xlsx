@@ -1,6 +1,8 @@
 use Spreadsheet::XLSX;
 use Test;
 
+plan 53;
+
 my Spreadsheet::XLSX $sheet;
 lives-ok { $sheet = Spreadsheet::XLSX.new },
         'Can create a new SpreadSheet::XLSX instance';
@@ -60,12 +62,34 @@ given $sheet.workbook {
     isnt $new-sheet-a.archive-path, $new-sheet-b.archive-path,
             'No filename conflict';
 
+    subtest "Non-set cell doesn't exists", {
+        plan 6;
+        nok ($new-sheet-a.cells[0;0]:exists), ":exists returns False";
+        ok ($new-sheet-a.cells[0;0]:!exists), ":!exists works";
+        nok ($new-sheet-a.cells[1;"A"]:exists), ':exists on multi-slice style reference';
+        ok ($new-sheet-a.cells[1;"A"]:!exists), ':!exists on multi-slice style reference';
+        nok ($new-sheet-a.cells["A1"]:exists), ':exists works with stringy reference';
+        ok ($new-sheet-a.cells["A1"]:!exists), ':!exists works with stringy reference';
+    }
+
     $new-sheet-a.cells[0;0] = Spreadsheet::XLSX::Cell::Text.new(value => 'Beef burrito');
     $new-sheet-a.cells[0;1] = Spreadsheet::XLSX::Cell::Number.new(value => 42);
+    subtest "Set cell exists", {
+        ok ($new-sheet-a.cells[0;0]:exists), ":exists reports True";
+        nok ($new-sheet-a.cells[0;0]:!exists), ':!exists reports False';
+        ok ($new-sheet-a.cells[1;"A"]:exists), ':exists with multislice-style reference';
+        nok ($new-sheet-a.cells[1;"A"]:!exists), ':!exists with multislice-style reference';
+        ok ($new-sheet-a.cells["A1"]:exists), ':exists works with stringy reference';
+        nok ($new-sheet-a.cells["A1"]:!exists), ':exists works with stringy reference';
+    }
     isa-ok $new-sheet-a.cells[0;0], Spreadsheet::XLSX::Cell::Text,
             'Can successfully assign a text cell into the worksheet';
     is $new-sheet-a.cells[0;0].value, 'Beef burrito',
             'Cell value is as expected';
+    is $new-sheet-a.cells[1;"A"].value, 'Beef burrito',
+       'Cell value is as expected when referenced with [1;"A"]';
+    is $new-sheet-a.cells["A1"].value, 'Beef burrito',
+       'Cell value is as expected when referenced with symbolic reference';
     isa-ok $new-sheet-a.cells[0;1], Spreadsheet::XLSX::Cell::Number,
             'Can successfully assign a number cell into the worksheet';
     is $new-sheet-a.cells[0;1].value, 42,
@@ -102,6 +126,7 @@ lives-ok { $serialized = $sheet.to-blob() },
 my Spreadsheet::XLSX $reloaded;
 lives-ok { $reloaded = Spreadsheet::XLSX.load($serialized) },
         'Can reload the serialized sheet';
+
 given $reloaded.worksheets {
     is .elems, 2, 'Workbook has two worksheets';
     is .[0].name, 'Test A', 'First worksheet has correct name';

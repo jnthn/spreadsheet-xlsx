@@ -6,9 +6,9 @@ use Test;
 
 plan 3;
 
-sub test-styles($ws, Str:D $source) is test-assertion {
+sub test-styles($ws, Str:D $source) {
     subtest "Test styles from " ~ $source, {
-        plan 7;
+        plan 8;
 
         my $styles = $ws.styles;
 
@@ -28,12 +28,12 @@ sub test-styles($ws, Str:D $source) is test-assertion {
             my $numFmts := $styles.number-formats;
 
             isa-ok $numFmts, Spreadsheet::XLSX::Styles::NumberFormats;
-            test-count($numFmts, 2);
+            test-count($numFmts, 3);
             test-item-type($numFmts, Spreadsheet::XLSX::Styles::NumberFormat);
 
-            is-deeply $numFmts.map(*.id).list, (164, 165), "format IDs";
+            is-deeply $numFmts.map(*.id).list, (164, 165, 166), "format IDs";
             is-deeply $numFmts.map(*.code).list,
-                      (q<"$"#,##0.00;[Red]"$"#,##0.00>, q<#,##0.0>),
+                      (q<"$"#,##0.00;[Red]"$"#,##0.00>, q<#,##0.0>, q<\₴#,###>),
                       "format codes";
         }
 
@@ -43,16 +43,22 @@ sub test-styles($ws, Str:D $source) is test-assertion {
             my $fonts = $styles.fonts;
 
             isa-ok $fonts, Spreadsheet::XLSX::Styles::Fonts;
-            test-count($fonts, 3);
+            test-count($fonts, 6);
             test-item-type($fonts, Font);
 
-            is-deeply $fonts.map(*.name), ('Calibri', 'Andale Mono', 'Lucida Sans'), "font names";
-            is-deeply $fonts.map(*.size), (12, 11, 12), "font sizes";
-            is-deeply $fonts.map(*.family), (Swiss, Swiss, Swiss), "font families";
-            is-deeply $fonts.map(*.color.theme), (1, 3, 1), "color themes";
+            is-deeply $fonts.map(*.name),
+                      ('Calibri', 'Andale Mono', 'Lucida Sans',
+                      'Calibri', 'Calibri', 'Courier New'),
+                      "font names";
+            is-deeply $fonts.map(*.size), (12, 11, |(12 xx 4)), "font sizes";
+            is-deeply $fonts.map(*.family), (|(Swiss xx 5), Roman), "font families";
+            is-deeply $fonts.map(*.color.theme), (1, 3, |(1 xx 4)), "color themes";
             is $fonts[1].color.tint, 0.79998168889431442, "color tint for Andale Mono";
-            is-deeply $fonts.map(*.scheme), (SchemeMinor, FontScheme, FontScheme), "schemes";
-            is-deeply $fonts.map(*.strike), (Bool, Bool, True), "strike";
+            is-deeply $fonts.map(*.scheme),
+                      (SchemeMinor, FontScheme, FontScheme,
+                      SchemeMinor, SchemeMinor, FontScheme),
+                      "schemes";
+            is-deeply $fonts.map(*.strike), (Bool, Bool, True, |(Bool xx 3)), "strike";
         }
 
         subtest "Fills", {
@@ -115,16 +121,16 @@ sub test-styles($ws, Str:D $source) is test-assertion {
             my $cell-formats = $styles.cell-formats;
 
             isa-ok $cell-formats, Spreadsheet::XLSX::Styles::Formats;
-            test-count($cell-formats, 9);
+            test-count($cell-formats, 10);
             test-item-type($cell-formats, Spreadsheet::XLSX::Styles::Format);
 
-            is-deeply $cell-formats.map(*.number-format-id), (0 xx 7, 164, 165).flat, "number format IDs";
-            is-deeply $cell-formats.map(*.font-id), (0 xx 6, 1, 2, 0).flat, "font IDs";
-            is-deeply $cell-formats.map(*.fill-id), (0 , 2, 0, 0, 0, 0, 3, 4, 0).flat, "fill IDs";
-            is-deeply $cell-formats.map(*.x-format-id), (0 xx 7, 1, 0).flat, "x-format IDs";
+            is-deeply $cell-formats.map(*.number-format-id), (0 xx 7, 164, 165, 166).flat, "number format IDs";
+            is-deeply $cell-formats.map(*.font-id), (0 xx 6, 1, 2, 0, 0).flat, "font IDs";
+            is-deeply $cell-formats.map(*.fill-id), (0 , 2, 0, 0, 0, 0, 3, 4, 0, 0).flat, "fill IDs";
+            is-deeply $cell-formats.map(*.x-format-id), (0 xx 7, 1, 0, 0).flat, "x-format IDs";
             ok $cell-formats[1].apply-fill, "2nd format apply fill";
             ok $cell-formats[2..5].map(*.apply-border).all, "3rd to 6th format apply border";
-            is-deeply $cell-formats.map(*.border-id), (0, 0, 1, 2, 3, 4, 0, 0, 0), "border IDs";
+            is-deeply $cell-formats.map(*.border-id), (0, 0, 1, 2, 3, 4, 0, 0, 0, 3), "border IDs";
             ok $cell-formats[6].apply-fill, "7th format apply fill";
             ok $cell-formats[6].apply-font, "7th format apply font";
             is $cell-formats[7].alignment.vertical, CenterVerticalAlign, "8th format vertical align";
@@ -143,6 +149,33 @@ sub test-styles($ws, Str:D $source) is test-assertion {
             is-deeply $cell-styles.map(*.name), <Fubar Normal>, "cell style names";
             is-deeply $cell-styles.map(*.builtin-id), (UInt, 0), "built-in IDs";
         }
+
+        subtest "Cell content", {
+            my $cells = $ws.workbook.worksheets[0].cells;
+            ok $cells['A2']:exists, "set cell exists";
+            nok $cells['E1']:exists, ':!exists with a non-set cell';
+
+            is $cells['A2'].value, 'Foo', "simple cell content";
+            is $cells['A7'].value, 'Bold, Italic, and Font', "formatted cell value is flattenned";
+            is $cells['A4'].style.number-format, '#,##0.0', 'a standard cell format code';
+            is $cells['B4'].style.number-format, '\₴#,###', 'a custom cell format code';
+            isa-ok $cells['A1'].style.fill.of, Spreadsheet::XLSX::Styles::PatternFill, "fill type";
+            is $cells['A1'].style.fill.fill-type, LightGrid, "fill type";
+            is $cells['A1'].style.fill.foreground-color.rgb, "FF92D050", "fill color";
+            given $cells['A7'].shared-string {
+                isa-ok $_, CT_Rst, "shared string type";
+                is .elems, 5, "has expected number of components";
+                ok ?(.all ~~ Spreadsheet::XLSX::Types::CT_RElt), "all components of CT_RElt type";
+                ok .[0].rPr.bold, "the 1st is bold";
+                nok .[1].rPr.bold, "the 2nd is not bold";
+                ok .[2].rPr.italic, "the 3rd is italic";
+                nok .[3].rPr.italic, "the 4th is not italic";
+                is .[4].rPr.rFont, "Courier New", "the 5th is Courier New";
+                is .[0].t, "Bold", "the 1st text";
+                is .[2].t, "Italic", "the 3rd text";
+                is .[4].t, "Font", "the 5th text";
+            }
+        }
     }
 }
 
@@ -153,8 +186,6 @@ lives-ok
     "loaded a sheet with some styles in it";
 
 test-styles($orig-ws, "file");
-
-$orig-ws.save($*PROGRAM.parent.add('test-data/stylish-out.xlsx'));
 
 my $copy-ws = Spreadsheet::XLSX.load( $orig-ws.to-blob );
 test-styles($copy-ws, "deserialization");

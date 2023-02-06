@@ -192,33 +192,32 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
     }
 }
 
-multi sub postcircumfix:<[ ]>(Spreadsheet::XLSX::Worksheet::Cells:D $c, Int:D $row, Str:D $col, Bool:D :$exists!) is export {
-    $exists ?? $c.EXISTS-POS($row, $col) !! !$c.EXISTS-POS($row, $col)
+multi sub postcircumfix:<[; ]>( Spreadsheet::XLSX::Worksheet::Cells:D $c, @indicies, Bool:D :$exists! ) is export {
+    $exists ?? $c.EXISTS-POS(|@indicies) !! !$c.EXISTS-POS(|@indicies)
 }
 
-multi sub postcircumfix:<[ ]>(Spreadsheet::XLSX::Worksheet::Cells:D $c, Int:D $row, Str:D $col) is export {
-    $c.AT-POS($row, $col)
+multi sub postcircumfix:<[; ]>( Spreadsheet::XLSX::Worksheet::Cells:D $c, @indicies ) is export {
+    $c.AT-POS: |@indicies
 }
 
 multi sub postcircumfix:<[ ]>(Spreadsheet::XLSX::Worksheet::Cells:D $c, Str:D $ref, Bool:D :$exists!) is export {
     $exists ?? $c.EXISTS-POS($ref) !! !$c.EXISTS-POS($ref)
 }
+
 multi sub postcircumfix:<[ ]>(Spreadsheet::XLSX::Worksheet::Cells:D $c, Str:D $ref) is export {
     $c.AT-POS($ref)
 }
 
-multi sub postcircumfix:<[ ]>( Spreadsheet::XLSX::Worksheet::Cells:D $c,
-                               Int:D $row,
-                               Str:D $col,
-                               Spreadsheet::XLSX::Cell $value
-                              ) is export
+multi sub postcircumfix:<[; ]>( Spreadsheet::XLSX::Worksheet::Cells:D $c,
+                               @indicies,
+                               Spreadsheet::XLSX::Cell $value ) is export
 {
-    $c.ASSIGN-POS($row, $col, $value)
+    $c.ASSIGN-POS(|@indicies, $value)
 }
+
 multi sub postcircumfix:<[ ]>( Spreadsheet::XLSX::Worksheet::Cells:D $c,
                                Str:D $ref,
-                               Spreadsheet::XLSX::Cell $value
-                              ) is export
+                               Spreadsheet::XLSX::Cell $value ) is export
 {
     $c.ASSIGN-POS($ref, $value)
 }
