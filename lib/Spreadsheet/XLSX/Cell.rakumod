@@ -134,10 +134,15 @@ class Spreadsheet::XLSX::Cell::Text does Spreadsheet::XLSX::Cell {
         }
     }
 
+    #| If cell's content is a shared string then return CT_Rst object. Otherwise return Nil.
+    method shared-string(::?CLASS:D:) {
+        $!type eq CTSharedStr
+            ?? $!root.shared-strings[+$!v]
+            !! Nil
+     }
+
     #| Get a string representing the cell's value.
-    multi method Str(::?CLASS:D:) {
-        $!value
-    }
+    multi method Str(::?CLASS:D:) { $!value }
 
     #| Sync the value to XML.
     method sync-value-xml(LibXML::Document $document, LibXML::Element $col --> Nil) {
