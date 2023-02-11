@@ -1,37 +1,92 @@
 use Spreadsheet::XLSX;
 use Test;
 
+plan 2;
+
 my $workbook = Spreadsheet::XLSX.new;
-my $sheet = $workbook.create-worksheet('Test sheet');
 
-$sheet.set(0, 0, 'Answer', :bold);
-given $sheet.cells[0;0] {
-    isa-ok $_, Spreadsheet::XLSX::Cell::Text,
-        'Convenience set form creates a text cell with a string';
-    is-deeply .value, 'Answer', 'Correct cell value';
-    ok .style.bold, 'Bold style set';
-    nok .style.italic, 'Italic style not set';
+subtest "On a new workbook" => {
+    plan 14;
+
+    my $sheet = $workbook.create-worksheet('Test sheet');
+
+    $sheet.set(0, 0, 'Answer', :bold, :font-name<Arial>);
+    given $sheet.cells[0;0] {
+        isa-ok $_, Spreadsheet::XLSX::Cell::Text,
+               'Convenience set form creates a text cell with a string';
+        is-deeply .value, 'Answer', 'Correct cell value';
+        ok .style.bold, 'Bold style set';
+        is .style.font-name, "Arial", "Font name set";
+        nok .style.italic, 'Italic style not set';
+    }
+
+    $sheet.set(0, 1, 42, :number-format('$#.#'));
+    given $sheet.cells[0;1] {
+        isa-ok $_, Spreadsheet::XLSX::Cell::Number,
+               'Convenience set form creates a number cell with an Int';
+        is-deeply .value, 42, 'Correct cell value';
+        nok .style.bold, 'No bold style set';
+        is .style.number-format, '$#.#', 'Number format is set';
+    }
+
+    dies-ok { $sheet.set(0, 2, 42, :no-such-style) },
+            'Trying to set a style that does not exist dies';
+
+    $sheet.set(0, 2, val('4.2'), :number-format('#.#'));
+    given $sheet.cells[0;2] {
+        isa-ok $_, Spreadsheet::XLSX::Cell::Number,
+               'Convenience set form creates a number cell with a RatStr';
+        is-deeply .value, 4.2, 'Correct cell value';
+        nok .style.bold, 'No bold style set';
+        is .style.number-format, '#.#', 'Number format is set';
+    }
+
+    $sheet.set(1, 1, 42, :number-format('$#.#'));
+    $sheet.set(2, 1, 42, :number-format('#,##0'));
 }
 
-$sheet.set(0, 1, 42, :number-format('#.#'));
-given $sheet.cells[0;1] {
-    isa-ok $_, Spreadsheet::XLSX::Cell::Number,
-            'Convenience set form creates a number cell with an Int';
-    is-deeply .value, 42, 'Correct cell value';
-    nok .style.bold, 'No bold style set';
-    is .style.number-format, '#.#', 'Number format is set';
-}
+subtest "On deserialized workbook" => {
+    plan 17;
 
-dies-ok { $sheet.set(0, 2, 42, :no-such-style) },
-        'Trying to set a style that does not exist dies';
+    my $serialized;
+    lives-ok { $serialized = $workbook.to-blob }, "Serialized with no accidents";
+    my $reloaded;
+    lives-ok { $reloaded = Spreadsheet::XLSX.load: $serialized }, "De-serialization succeeded";
 
-$sheet.set(0, 2, val('4.2'), :number-format('#.#'));
-given $sheet.cells[0;2] {
-    isa-ok $_, Spreadsheet::XLSX::Cell::Number,
-            'Convenience set form creates a number cell with a RatStr';
-    is-deeply .value, 4.2, 'Correct cell value';
-    nok .style.bold, 'No bold style set';
-    is .style.number-format, '#.#', 'Number format is set';
+    my $sheet = $reloaded.worksheets[0];
+
+    given $sheet.cells[0;0] {
+        isa-ok $_, Spreadsheet::XLSX::Cell::Text,
+               'Convenience set form creates a text cell with a string';
+        is-deeply .value, 'Answer', 'Correct cell value';
+        ok .style.bold, 'Bold style set';
+        is .style.font-name, "Arial", "Font name set";
+        nok .style.italic, 'Italic style not set';
+    }
+
+    my $numFmtId;
+    given $sheet.cells[0;1] {
+        isa-ok $_, Spreadsheet::XLSX::Cell::Number,
+               'Convenience set form creates a number cell with an Int';
+        is-deeply .value, 42, 'Correct cell value';
+        nok .style.bold, 'No bold style set';
+        is .style.number-format, '$#.#', 'Number format is set';
+        $numFmtId = .style.format.number-format-id;
+    }
+
+    given $sheet.cells[1;1] {
+        is .style.format.number-format-id, $numFmtId, "same format code results in same number format ID";
+    }
+
+    given $sheet.cells[0;2] {
+        isa-ok $_, Spreadsheet::XLSX::Cell::Number,
+               'Convenience set form creates a number cell with a RatStr';
+        is-deeply .value, 4.2, 'Correct cell value';
+        nok .style.bold, 'No bold style set';
+        is .style.number-format, '#.#', 'Number format is set';
+    }
+
+    is $sheet.cells[2;1].style.format.number-format-id, 3, "A standard format ID used for a known format code";
 }
 
 done-testing;

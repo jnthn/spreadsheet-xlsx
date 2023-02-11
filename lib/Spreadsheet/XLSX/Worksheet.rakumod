@@ -41,33 +41,94 @@ class Spreadsheet::XLSX::Worksheet {
 
         submethod TWEAK(LibXML::Element :$!backing --> Nil) {}
 
-        multi method AT-POS(Int $row, Int $col) is raw {
-            my @row := (@!rows[$row] //= Array[Spreadsheet::XLSX::Cell].new);
-            my $cell := @row[$col];
-            $cell //= self!maybe-load-from-backing($row, $col);
-            $cell
+        #| Convert string column reference (name) from "A", "AA", "AAZ", etc. into 0-based index
+        method idx-from-colref(Str:D $colref --> UInt:D) {
+            my @chars = $colref.comb;
+            die "Invalid column reference '$colref'" unless "A" le @chars.all le "Z";
+            @chars.map(*.ord - 65).cache andthen (|.head(*-1).map(* + 1), .tail).reduce({ $^a *26 + $^b })
         }
 
-        multi method ASSIGN-POS(Int $row, Int $col, Spreadsheet::XLSX::Cell $value) {
+        #| Convert a 0-based index into column reference (name)
+        method colref-from-idx(UInt:D $col --> Str:D) {
+            ($col ?? $col.polymod(26 xx *) !! 0).reverse.cache
+                andthen (|.head(*-1).map(*+1), .tail).map({ ($_ + 65).chr }).join
+        }
+
+        # Split a cell reference "A42" into 42 and "A"
+        method !parse-ref(Str:D $ref, Bool :$as-int) {
+            if $ref ~~ /^ $<colref>=<[A..Z]>+ $<row>=\d+ $/ -> $m {
+                return $as-int
+                    ?? ($m<row> - 1, self.idx-from-colref(~$m<colref>))
+                    !! ($m<row>.Int, ~$<colref>)
+            }
+            die "Invalid cell reference '$ref'"
+        }
+
+        multi method AT-POS(::?CLASS:D: Int $row, Int $col --> Spreadsheet::XLSX::Cell) is raw {
+            # Convert column number into Excel's A..Z, AA..ZZ, AAA...ZZZ column reference.
+            self!maybe-load-from-backing($row + 1, self.colref-from-idx($col));
+        }
+
+        multi method AT-POS(::?CLASS:D: Int:D $row, Str:D $colref) {
+            self!maybe-load-from-backing($row, $colref)
+        }
+
+        multi method AT-POS(::?CLASS:D: Str:D $ref) is raw {
+            self!maybe-load-from-backing: |self!parse-ref($ref)
+        }
+
+        multi method ASSIGN-POS(::?CLASS:D: Int $row, Int $col, Spreadsheet::XLSX::Cell $value) {
             my @row := (@!rows[$row] //= Array[Spreadsheet::XLSX::Cell].new);
             @row[$col] = $value
         }
 
-        method max-row {
-            self!load-backing-rows;
-            @!backing-rows.elems - 1
+        multi method ASSIGN-POS(::?CLASS:D: Int:D $row, Str:D $colref, Spreadsheet::XLSX::Cell $value) {
+            samewith $row - 1, self.idx-from-colref($colref), $value
+        }
+        multi method ASSIGN-POS(::?CLASS:D: Str:D $ref, Spreadsheet::XLSX::Cell $value) {
+            samewith |self!parse-ref($ref, :as-int), $value
         }
 
-        method !maybe-load-from-backing(Int $row, Int $col) {
-            with self!lookup-backing-row($row) -> LibXML::Element $backing-row {
-                my ($from, $to) = get-attribute($backing-row, "spans").split(':');
-                if $from <= $col + 1 <= $to {
-                    my LibXML::Element $doc-col = $backing-row.childNodes[$col - ($from - 1)];
+        multi method EXISTS-POS(::?CLASS:D: Int:D $row, Int:D $col) {
+            self!exists-locally($row, $col)
+                || samewith(self.colref-from-idx($col) ~ ($row + 1))
+        }
+        multi method EXISTS-POS(::?CLASS:D: Int:D $row, Str:D $colref) {
+            self!exists-locally($row - 1, self.idx-from-colref($colref))
+                || samewith $colref ~ $row
+        }
+        multi method EXISTS-POS(::?CLASS:D: Str:D $ref) {
+            self!exists-locally( |self!parse-ref($ref, :as-int) )
+                || ( $!backing andthen .exists( q«.//*[local-name() = 'c' and namespace-uri() = '»
+                    ~ $!backing.namespaceURI ~ q«' and @r = '» ~ $ref ~ q«']» ))
+        }
+
+        method max-row {
+            self!load-backing-rows;
+            @!backing-rows.end
+        }
+
+        # Be careful and don't auto-vivify rows by accident!
+        method !exists-locally(Int:D $row, Int:D $col) {
+            @!rows[$row]:exists && @!rows[$row].EXISTS-POS($col)
+        }
+
+        # $row is 1-based here because we use stringy $colref. I.e., it's a reflection of "A1" refrerence notation.
+        method !maybe-load-from-backing(Int $row, Str:D $colref) {
+            return $_ with @!rows[$row - 1][self.idx-from-colref($colref)];
+
+            with self!lookup-backing-row($row - 1) -> LibXML::Element $backing-row {
+                    my $cellref = $colref ~ $row;
+                    # This could be a sparse row with missing columns. The only reliable approach is to search by
+                    # `A1`-style reference.
+                    my LibXML::Element $doc-col =
+                        $backing-row.findnodes(q«./*[local-name() = 'c' and namespace-uri() = '»
+                            ~ $backing-row.namespaceURI ~ q«' and @r = '» ~ $cellref ~ q«']» ).first;
                     if $doc-col && $doc-col.nodeName eq 'c' {
-                        return self!load-cell($doc-col);
+                        return cell-from-xml($doc-col, $!worksheet.root);
                     }
-                }
             }
+
             return Spreadsheet::XLSX::Cell;
         }
 
@@ -87,21 +148,6 @@ class Spreadsheet::XLSX::Worksheet {
         method !lookup-backing-row($row) {
             self!load-backing-rows;
             @!backing-rows[$row]
-        }
-
-        method !load-cell(LibXML::Element $cell --> Spreadsheet::XLSX::Cell) {
-            my $type = get-attribute($cell, 't', :optional) // '';
-            if $type eq 's' {
-                my LibXML::Element $shared-index-holder = $cell.first;
-                unless $shared-index-holder.nodeName eq 'v' {
-                    die X::Spreadsheet::XLSX::Format.new:
-                            message => "Missing v node for shared cell value";
-                }
-                $!worksheet.root.shared-strings[$shared-index-holder.string-value.Int]
-            }
-            else {
-                cell-from-xml($cell)
-            }
         }
 
         #| Synchronize the values of cells we've set/changed with the

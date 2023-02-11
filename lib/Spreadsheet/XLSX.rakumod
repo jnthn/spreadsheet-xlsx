@@ -4,6 +4,7 @@ use Spreadsheet::XLSX::Exceptions;
 use Spreadsheet::XLSX::Relationships;
 use Spreadsheet::XLSX::Root;
 use Spreadsheet::XLSX::Workbook;
+use Spreadsheet::XLSX::Worksheet;
 
 class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
     #| Map of files in the decompressed archive we read from, if any.
@@ -189,4 +190,34 @@ class Spreadsheet::XLSX does Spreadsheet::XLSX::Root {
         $!archive //= {};
         $!archive{'[Content_Types].xml'} = $!content-types.to-xml();
     }
+}
+
+multi sub postcircumfix:<[; ]>( Spreadsheet::XLSX::Worksheet::Cells:D $c, @indicies, Bool:D :$exists! ) is export {
+    $exists ?? $c.EXISTS-POS(|@indicies) !! !$c.EXISTS-POS(|@indicies)
+}
+
+multi sub postcircumfix:<[; ]>( Spreadsheet::XLSX::Worksheet::Cells:D $c, @indicies ) is export {
+    $c.AT-POS: |@indicies
+}
+
+multi sub postcircumfix:<[ ]>(Spreadsheet::XLSX::Worksheet::Cells:D $c, Str:D $ref, Bool:D :$exists!) is export {
+    $exists ?? $c.EXISTS-POS($ref) !! !$c.EXISTS-POS($ref)
+}
+
+multi sub postcircumfix:<[ ]>(Spreadsheet::XLSX::Worksheet::Cells:D $c, Str:D $ref) is export {
+    $c.AT-POS($ref)
+}
+
+multi sub postcircumfix:<[; ]>( Spreadsheet::XLSX::Worksheet::Cells:D $c,
+                               @indicies,
+                               Spreadsheet::XLSX::Cell $value ) is export
+{
+    $c.ASSIGN-POS(|@indicies, $value)
+}
+
+multi sub postcircumfix:<[ ]>( Spreadsheet::XLSX::Worksheet::Cells:D $c,
+                               Str:D $ref,
+                               Spreadsheet::XLSX::Cell $value ) is export
+{
+    $c.ASSIGN-POS($ref, $value)
 }
