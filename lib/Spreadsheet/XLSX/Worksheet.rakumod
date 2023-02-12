@@ -90,17 +90,17 @@ class Spreadsheet::XLSX::Worksheet {
         }
 
         multi method EXISTS-POS(::?CLASS:D: Int:D $row, Int:D $col) {
-            self!exists-locally($row, $col)
-                || samewith(self.colref-from-idx($col) ~ ($row + 1))
+            ? (self!exists-locally($row, $col)
+                || samewith(self.colref-from-idx($col) ~ ($row + 1)))
         }
         multi method EXISTS-POS(::?CLASS:D: Int:D $row, Str:D $colref) {
-            self!exists-locally($row - 1, self.idx-from-colref($colref))
-                || samewith $colref ~ $row
+            ? (self!exists-locally($row - 1, self.idx-from-colref($colref))
+                || samewith $colref ~ $row)
         }
         multi method EXISTS-POS(::?CLASS:D: Str:D $ref) {
-            self!exists-locally( |self!parse-ref($ref, :as-int) )
+            ? (self!exists-locally( |self!parse-ref($ref, :as-int) )
                 || ( $!backing andthen .exists( q«.//*[local-name() = 'c' and namespace-uri() = '»
-                    ~ $!backing.namespaceURI ~ q«' and @r = '» ~ $ref ~ q«']» ))
+                    ~ $!backing.namespaceURI ~ q«' and @r = '» ~ $ref ~ q«']» )))
         }
 
         method max-row {
