@@ -28,20 +28,4 @@ class Spreadsheet::XLSX::SharedStrings is xml-sequence("sst", :si(Spreadsheet::X
     method empty(Spreadsheet::XLSX::Root :$root!--> Spreadsheet::XLSX::SharedStrings) {
         self.new(:$root)
     }
-
-#    #| Get the shared string entry at the given position. Creates a fresh
-#    #| object each time, which an given sheet can cache as a particular
-#    #| cell position.
-#    method AT-POS(Int $idx) {
-#        with $!backing {
-#            with $!backing.childNodes[$idx] -> LibXML::Element $si {
-#                if $si.nodeName ne 'si' {
-#                    die X::Spreadsheet::XLSX::Format.new: message =>
-#                            'Shared strings entry was not an si node';
-#                }
-#                return shared-cell-from-xml($si.first);
-#            }
-#        }
-#        fail "Could not resolve shared string entry $idx";
-#    }
 }

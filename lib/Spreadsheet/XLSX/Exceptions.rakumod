@@ -13,3 +13,11 @@ class X::Spreadsheet::XLSX::NoSuchRelationship does X::Spreadsheet::XLSX {
         "No such relationship '$!id'"
     }
 }
+
+#| A non-standard property name
+class X::Spreadsheet::XLSX::NoSuchProperty does X::Spreadsheet::XLSX {
+    has Str $.property is required;
+    method message() {
+        "No such property '$!property'"
+    }
+}
