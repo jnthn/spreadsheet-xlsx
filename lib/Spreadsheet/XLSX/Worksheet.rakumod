@@ -129,7 +129,7 @@ class Spreadsheet::XLSX::Worksheet {
                     }
             }
 
-            return Spreadsheet::XLSX::Cell;
+            return Nil;
         }
 
         method !load-backing-rows {
