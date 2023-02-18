@@ -30,7 +30,7 @@ class Spreadsheet::XLSX::ContentTypes {
             die X::Spreadsheet::XLSX::Format.new: message =>
                     'Content types did not start with tag Types';
         }
-        for $root.childNodes -> LibXML::Element $entry {
+        for $root.elements -> LibXML::Element $entry {
             if $entry.nodeName eq 'Default' {
                 @defaults.push: Default.new:
                         extension => self!get-attribute($entry, 'Extension'),
