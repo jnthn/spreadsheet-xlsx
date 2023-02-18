@@ -40,7 +40,7 @@ class Spreadsheet::XLSX::Relationships {
             die X::Spreadsheet::XLSX::Format.new: message =>
                     'Relationships file did not start with tag Relationships';
         }
-        self.new: :$for, relationships => $root.childNodes.map: -> LibXML::Element $entry {
+        self.new: :$for, relationships => $root.elements.map: -> LibXML::Element $entry {
             Relationship.new:
                     :id(self!get-attribute($entry, 'Id')),
                     :type(self!get-attribute($entry, 'Type')),

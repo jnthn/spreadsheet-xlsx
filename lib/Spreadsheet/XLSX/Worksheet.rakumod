@@ -135,7 +135,7 @@ class Spreadsheet::XLSX::Worksheet {
         method !load-backing-rows {
             with $!backing {
                 unless @!backing-rows {
-                    $!backing.childNodes.map: -> LibXML::Element $backing-row {
+                    $!backing.elements.map: -> LibXML::Element $backing-row {
                         if $backing-row.nodeName eq 'row' {
                             my $row-str = get-attribute($backing-row, 'r');
                             @!backing-rows[$row-str.Int - 1] = $backing-row;
@@ -374,8 +374,8 @@ class Spreadsheet::XLSX::Worksheet {
         my @columns;
         with $!backing-path {
             my LibXML::Element $doc-root := self!get-backing-document().documentElement();
-            with $doc-root.childNodes.list.first(*.nodeName eq 'cols') -> LibXML::Element $cols {
-                for $cols.childNodes -> LibXML::Element $col {
+            with $doc-root.elements.list.first(*.nodeName eq 'cols') -> LibXML::Element $cols {
+                for $cols.elements -> LibXML::Element $col {
                     for get-attribute($col, 'min').Int .. get-attribute($col, 'max').Int {
                         @columns[$_ - 1] = Column.from-xml($col);
                     }
@@ -437,7 +437,7 @@ class Spreadsheet::XLSX::Worksheet {
         }
 
         # Update the sheet data.
-        my @node-list := $!backing.documentElement.childNodes.list;
+        my @node-list := $!backing.documentElement.elements.list;
         my LibXML::Element $sheetData = @node-list.first(*.name eq 'sheetData');
         with $sheetData {
             .sync-sheet-data-xml($sheetData, $!root.styles) with $!cells;

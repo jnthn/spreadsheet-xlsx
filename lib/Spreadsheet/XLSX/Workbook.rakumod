@@ -39,8 +39,8 @@ class Spreadsheet::XLSX::Workbook {
             die X::Spreadsheet::XLSX::Format.new: message =>
                     'Workbook file did not start with tag workbook';
         }
-        with $workbook.childNodes.list.first(*.name eq 'sheets') -> LibXML::Element $sheets-node {
-            my @worksheets = $sheets-node.childNodes.map: -> LibXML::Element $sheet-node {
+        with $workbook.elements.list.first(*.name eq 'sheets') -> LibXML::Element $sheets-node {
+            my @worksheets = $sheets-node.elements.map: -> LibXML::Element $sheet-node {
                 my $id := self!get-attribute($sheet-node, 'sheetId').Int;
                 my $name := self!get-attribute($sheet-node, 'name');
                 my $sheet-rel-id := self!get-attribute($sheet-node, 'r:id');
@@ -179,7 +179,7 @@ class Spreadsheet::XLSX::Workbook {
             # This will work out for sure, 'cus if it didn't we'd not have
             # successfully constructed this instance.
             my $workbook = $!backing.documentElement;
-            $workbook.childNodes.list.first(*.name eq 'sheets')
+            $workbook.elements.list.first(*.name eq 'sheets')
         }
         else {
             $!backing .= new: :version('1.0'), :enc('UTF-8');
